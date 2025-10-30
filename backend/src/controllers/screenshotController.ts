@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { ScreenshotModel } from '../models/Screenshot';
+import { getScreenshotsDir } from '../utils/paths';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,17 +14,27 @@ const CollectSchema = z.object({
   deviceId: z.string().optional(),
   domain: z.string().optional(),
   username: z.string().optional(),
+  hostname: z.string().optional(),
+  platform: z.string().optional(),
 });
 
 export async function collectScreenshot(req: Request, res: Response) {
   const parsed = CollectSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
 
-  const { screenshot, deviceId, domain, username } = parsed.data;
+  const { screenshot, deviceId, domain, username, hostname, platform } = parsed.data;
   const buffer = Buffer.from(screenshot.replace(/^data:image\/png;base64,/, ''), 'base64');
-  const dir = path.join(__dirname, '..', 'screenshots');
+  const dir = getScreenshotsDir();
   await fs.mkdir(dir, { recursive: true });
-  const filename = `${Date.now()}_${(username || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '')}.png`;
+  const safe = (v?: string) => (v || '').replace(/[^a-zA-Z0-9_.-]/g, '-');
+  const parts = [String(Date.now())];
+  if (deviceId) parts.push(safe(deviceId));
+  if (safe(hostname)) parts.push(safe(hostname));
+  if (safe(platform)) parts.push(safe(platform));
+  // Fallback to username or domain for backwards compatibility
+  if (!hostname && username) parts.push(safe(username));
+  if (!hostname && !username && domain) parts.push(safe(domain));
+  const filename = `${parts.filter(Boolean).join('_')}.png`;
   const filePath = path.join(dir, filename);
   await fs.writeFile(filePath, buffer);
 

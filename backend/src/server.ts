@@ -11,6 +11,7 @@ import router from './routes/index';
 import { errorHandler } from './middleware/errorHandler';
 import { connectToDatabase } from './utils/db';
 import { ensureDefaultAdmin } from './utils/auth.js';
+import { getScreenshotsDir } from './utils/paths';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,7 +44,7 @@ app.use(session(sessionOptions));
 // Static screenshots folder (with cache headers)
 app.use(
   '/screenshots',
-  express.static(path.join(__dirname, '..', 'screenshots'), {
+  express.static(getScreenshotsDir(), {
     maxAge: '1h',
     etag: true,
     index: false,

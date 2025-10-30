@@ -156,7 +156,7 @@ function App(): JSX.Element {
           <section>
             <KpiCards
               events={summary?.totals?.events || summary?.total?.events || 0}
-              users={summary?.totals?.users || summary?.total?.users || 0}
+              users={(summary as any)?.registeredUsers || summary?.totals?.users || summary?.total?.users || 0}
               screenshots={summary?.totals?.screenshots || 0}
               domains={summary?.totals?.domains || summary?.total?.domains || 0}
               loading={summaryLoading}

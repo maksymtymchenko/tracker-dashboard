@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { EventModel } from '../models/Event';
+import { UserModel } from '../models/User.js';
+import { ScreenshotModel } from '../models/Screenshot';
 import { DepartmentModel, UserDepartmentModel } from '../models/Department.js';
 
 const NewEventShape = z.object({
@@ -219,7 +221,11 @@ export async function analyticsSummary(_req: Request, res: Response) {
   const todayS = todayAgg[0] || { events: 0, duration: 0 };
   const weekS = weekAgg[0] || { events: 0, duration: 0 };
   const monthS = monthAgg[0] || { events: 0, duration: 0 };
-  return res.json({ total, today: todayS, thisWeek: weekS, thisMonth: monthS });
+  const registeredUsers = await UserModel.countDocuments();
+  const screenshots = await ScreenshotModel.estimatedDocumentCount();
+  // include legacy-compatible totals with screenshots for UI
+  const totals = { events: total.events || 0, users: total.users || 0, domains: total.domains || 0, screenshots };
+  return res.json({ total, totals, today: todayS, thisWeek: weekS, thisMonth: monthS, registeredUsers });
 }
 
 export async function analyticsTopDomains(req: Request, res: Response) {

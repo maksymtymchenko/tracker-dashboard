@@ -12,7 +12,7 @@ interface Props {
 export function KpiCards({ events, users, screenshots, domains, loading, error }: Props): JSX.Element {
   const items = [
     { label: 'Total Events', value: events },
-    { label: 'Active Users', value: users },
+    { label: 'Total Users', value: users },
     { label: 'Screenshots', value: screenshots },
     { label: 'Unique Domains', value: domains },
   ];

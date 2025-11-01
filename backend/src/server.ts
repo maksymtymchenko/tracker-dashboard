@@ -18,8 +18,24 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-app.use(helmet());
-app.use(cors({ origin: true, credentials: true }));
+// Configure CORS before Helmet to ensure headers are set correctly
+const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = process.env.CORS_ORIGIN 
+  ? process.env.CORS_ORIGIN.split(',')
+  : true; // Allow all origins (safe with proper cookie settings)
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  optionsSuccessStatus: 200,
+}));
+
+// Configure Helmet with CORS-safe settings
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginEmbedderPolicy: false,
+}));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
@@ -27,7 +43,12 @@ const sessionOptions: session.SessionOptions = {
   secret: process.env.SESSION_SECRET || 'dev_secret_change_me',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, sameSite: 'lax' },
+  cookie: {
+    secure: isProduction, // true for HTTPS in production
+    sameSite: isProduction ? 'none' : 'lax', // 'none' needed for cross-origin cookies with HTTPS
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  },
 };
 if (process.env.MONGO_URI) {
   try {

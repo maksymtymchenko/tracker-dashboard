@@ -43,4 +43,17 @@ export interface Department { _id: string; name: string; color?: string; descrip
 export interface UserDepartment { _id: string; username: string; departmentId: string }
 export interface BasicUser { _id: string; username: string; role: 'admin' | 'user' }
 
+export interface DepartmentAnalytics {
+  id: string;
+  name: string;
+  color?: string;
+  description?: string;
+  userCount: number;
+  events: number;
+  duration: number;
+  durationHours: number;
+  uniqueDomains: number;
+  averageDuration: number;
+}
+
 

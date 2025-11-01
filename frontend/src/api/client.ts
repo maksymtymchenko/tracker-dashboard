@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, Department, UserDepartment, BasicUser } from 'src/types';
+import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, Department, UserDepartment, BasicUser, DepartmentAnalytics } from 'src/types';
 
 export const api = axios.create({ withCredentials: true });
 
@@ -48,6 +48,11 @@ export async function fetchUsersAnalytics() {
 export async function listDepartments() {
   const { data } = await api.get<{ items: Department[] }>('/api/departments');
   return data.items;
+}
+
+export async function fetchDepartmentsAnalytics() {
+  const { data } = await api.get<{ departments: DepartmentAnalytics[] }>('/api/departments/analytics');
+  return data.departments;
 }
 
 export async function createDepartment(payload: Partial<Department>) {

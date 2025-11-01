@@ -100,6 +100,112 @@ export async function departmentStats(req: Request, res: Response) {
   return res.json({ stats });
 }
 
+export async function allDepartmentsAnalytics(req: Request, res: Response) {
+  // Get all departments with their users
+  const [departments, userDepartments] = await Promise.all([
+    DepartmentModel.find().lean(),
+    UserDepartmentModel.find().lean(),
+  ]);
+
+  // Create map of department -> usernames
+  const deptIdToUsers = new Map<string, string[]>();
+  userDepartments.forEach((ud) => {
+    const deptId = String(ud.departmentId);
+    if (!deptIdToUsers.has(deptId)) {
+      deptIdToUsers.set(deptId, []);
+    }
+    deptIdToUsers.get(deptId)!.push(ud.username);
+  });
+
+  // Get all usernames
+  const allUsernames = Array.from(new Set(userDepartments.map((ud) => ud.username)));
+
+  // Aggregate events by username
+  const eventsByUser = await EventModel.aggregate([
+    { $match: { username: { $in: allUsernames } } },
+    {
+      $group: {
+        _id: '$username',
+        events: { $sum: 1 },
+        duration: { $sum: { $ifNull: ['$durationMs', 0] } },
+        uniqueDomains: { $addToSet: '$domain' },
+      },
+    },
+    {
+      $project: {
+        username: '$_id',
+        _id: 0,
+        events: 1,
+        duration: 1,
+        uniqueDomains: { $size: { $setDifference: ['$uniqueDomains', [null]] } },
+      },
+    },
+  ]);
+
+  // Create map of username -> stats
+  const userStats = new Map<string, { events: number; duration: number; uniqueDomains: number }>();
+  eventsByUser.forEach((stat) => {
+    userStats.set(stat.username, {
+      events: stat.events || 0,
+      duration: stat.duration || 0,
+      uniqueDomains: stat.uniqueDomains || 0,
+    });
+  });
+
+  // Get unique domains by username
+  const domainsByUser = await EventModel.aggregate([
+    { $match: { username: { $in: allUsernames }, domain: { $ne: null } } },
+    { $group: { _id: { username: '$username', domain: '$domain' } } },
+    { $group: { _id: '$_id.username', domains: { $addToSet: '$_id.domain' } } },
+    { $project: { username: '$_id', _id: 0, domains: 1 } },
+  ]);
+
+  const userDomains = new Map<string, Set<string>>();
+  domainsByUser.forEach((item) => {
+    userDomains.set(item.username, new Set(item.domains));
+  });
+
+  // Aggregate stats by department
+  const deptAnalytics = departments.map((dept) => {
+    const deptId = String((dept as any)._id);
+    const usernames = deptIdToUsers.get(deptId) || [];
+    let events = 0;
+    let duration = 0;
+    const uniqueDomainsSet = new Set<string>();
+    const userCount = usernames.length;
+
+    usernames.forEach((username) => {
+      const stats = userStats.get(username);
+      if (stats) {
+        events += stats.events;
+        duration += stats.duration;
+      }
+      const domains = userDomains.get(username);
+      if (domains) {
+        domains.forEach((domain) => uniqueDomainsSet.add(domain));
+      }
+    });
+
+    return {
+      id: deptId,
+      name: dept.name,
+      color: dept.color || '#3b82f6',
+      description: dept.description,
+      userCount,
+      events,
+      duration,
+      durationHours: Math.round((duration / 3600000) * 10) / 10,
+      uniqueDomains: uniqueDomainsSet.size,
+      averageDuration: events > 0 ? Math.round(duration / events) : 0,
+    };
+  });
+
+  // Sort by events descending
+  deptAnalytics.sort((a, b) => b.events - a.events);
+
+  return res.json({ departments: deptAnalytics });
+}
+
 export async function searchDepartments(req: Request, res: Response) {
   const q = String((req.query.q as string) || '').toLowerCase();
   const items = await DepartmentModel.find().lean();

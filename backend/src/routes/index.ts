@@ -35,6 +35,7 @@ import {
 } from '../controllers/departmentController';
 import {
   departmentStats,
+  allDepartmentsAnalytics,
   searchDepartments,
   exportDepartments,
   importDepartments,
@@ -189,6 +190,8 @@ router.post(
 );
 
 router.get('/api/departments/:id/stats', requireAdmin, departmentStats);
+
+router.get('/api/departments/analytics', requireAuth, allDepartmentsAnalytics);
 
 router.get('/api/departments/search', requireAdmin, searchDepartments);
 

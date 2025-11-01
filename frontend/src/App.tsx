@@ -9,8 +9,9 @@ import { UsersOverview } from 'src/components/UsersOverview';
 import { ActivityFilters, ActivityFilterState } from 'src/components/ActivityFilters';
 import { AdminUsers } from 'src/components/AdminUsers';
 import { DepartmentsModal } from 'src/components/DepartmentsModal';
-import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout } from 'src/api/client';
-import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem } from 'src/types';
+import { DepartmentAnalytics } from 'src/components/DepartmentAnalytics';
+import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, fetchDepartmentsAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout } from 'src/api/client';
+import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, DepartmentAnalytics as DepartmentAnalyticsType } from 'src/types';
 
 function App(): JSX.Element {
   const [dark, setDark] = useState<boolean>(true);
@@ -36,6 +37,9 @@ function App(): JSX.Element {
   const [usersAgg, setUsersAgg] = useState<UserAggregateItem[]>([]);
   const [usersAggLoading, setUsersAggLoading] = useState(false);
   const [usersAggError, setUsersAggError] = useState<string | undefined>();
+  const [deptAnalytics, setDeptAnalytics] = useState<DepartmentAnalyticsType[]>([]);
+  const [deptAnalyticsLoading, setDeptAnalyticsLoading] = useState(false);
+  const [deptAnalyticsError, setDeptAnalyticsError] = useState<string | undefined>();
   const [filters, setFilters] = useState<ActivityFilterState>({ timeRange: 'all' });
   const [showDepartments, setShowDepartments] = useState(false);
   const [usersOptions, setUsersOptions] = useState<string[]>([]);
@@ -129,6 +133,17 @@ function App(): JSX.Element {
         setUsersAggLoading(false);
       }
     })();
+    (async () => {
+      setDeptAnalyticsError(undefined);
+      setDeptAnalyticsLoading(true);
+      try {
+        setDeptAnalytics(await fetchDepartmentsAnalytics());
+      } catch (e: unknown) {
+        setDeptAnalyticsError(e instanceof Error ? e.message : 'Failed to load');
+      } finally {
+        setDeptAnalyticsLoading(false);
+      }
+    })();
   }, [user, filters, activityPage, shotsPage, shotsUser]);
 
   const handleLogin = async (u: string, p: string) => {
@@ -173,6 +188,12 @@ function App(): JSX.Element {
               <UsersOverview data={usersAgg} loading={usersAggLoading} error={usersAggError} />
             </div>
           </section>
+
+          {deptAnalytics.length > 0 && (
+            <section>
+              <DepartmentAnalytics data={deptAnalytics} loading={deptAnalyticsLoading} error={deptAnalyticsError} />
+            </section>
+          )}
 
           <section className="p-4 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800">
             <div className="font-medium mb-3">Activity Log</div>

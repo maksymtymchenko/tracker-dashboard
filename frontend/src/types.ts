@@ -1,6 +1,6 @@
 export interface AuthUser {
   username: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'ADMIN' | 'VIEWER';
 }
 
 export interface ActivityItem {

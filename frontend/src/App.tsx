@@ -166,15 +166,15 @@ function App(): JSX.Element {
   return (
     <div className={dark ? 'dark' : ''}>
       <div className="min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
-        <Header username={user?.username} role={user?.role} dark={dark} onToggleDark={() => setDark((v) => !v)} onLogout={handleLogout} />
+        <Header username={user?.username} role={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'} dark={dark} onToggleDark={() => setDark((v) => !v)} onLogout={handleLogout} />
 
         <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
           <section>
             <KpiCards
-              events={summary?.totals?.events || summary?.total?.events || 0}
-              users={(summary as any)?.registeredUsers || summary?.totals?.users || summary?.total?.users || 0}
+              events={summary?.totals?.events || 0}
+              users={(summary as any)?.registeredUsers || summary?.totals?.users || 0}
               screenshots={summary?.totals?.screenshots || 0}
-              domains={summary?.totals?.domains || summary?.total?.domains || 0}
+              domains={summary?.totals?.domains || 0}
               loading={summaryLoading}
               error={summaryError}
             />
@@ -230,10 +230,10 @@ function App(): JSX.Element {
             usersOptions={usersOptions}
             userFilter={shotsUser}
             onUserFilterChange={(u) => { setShotsPage(1); setShotsUser(u); }}
-            userRole={user?.role === 'ADMIN' ? 'admin' : 'user'}
+            userRole={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'}
           />
 
-          {user?.role === 'ADMIN' && <AdminUsers canManage={true} />}
+          {(user?.role === 'ADMIN' || user?.role === 'admin') && <AdminUsers canManage={true} />}
         </main>
         <DepartmentsModal open={showDepartments} onClose={() => setShowDepartments(false)} />
       </div>

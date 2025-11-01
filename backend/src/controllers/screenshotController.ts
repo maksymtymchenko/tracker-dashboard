@@ -64,7 +64,8 @@ export async function deleteScreenshot(req: Request, res: Response) {
   const { filename } = req.params;
   const shot = await ScreenshotModel.findOneAndDelete({ filename });
   if (!shot) return res.status(404).json({ error: 'not found' });
-  const filePath = path.join(__dirname, '..', 'screenshots', filename);
+  const dir = getScreenshotsDir();
+  const filePath = path.join(dir, filename);
   await fs.rm(filePath, { force: true });
   return res.json({ success: true, ok: true, message: 'Screenshot deleted successfully', filename });
 }
@@ -75,7 +76,7 @@ export async function bulkDeleteScreenshots(req: Request, res: Response) {
   if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
 
   const { filenames } = parsed.data;
-  const dir = path.join(__dirname, '..', 'screenshots');
+  const dir = getScreenshotsDir();
   const result = await ScreenshotModel.deleteMany({ filename: { $in: filenames } });
   await Promise.all(filenames.map((f) => fs.rm(path.join(dir, f), { force: true })));
   return res.json({ ok: true, deleted: result.deletedCount || 0 });

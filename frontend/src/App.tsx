@@ -230,6 +230,7 @@ function App(): JSX.Element {
             usersOptions={usersOptions}
             userFilter={shotsUser}
             onUserFilterChange={(u) => { setShotsPage(1); setShotsUser(u); }}
+            userRole={user?.role === 'ADMIN' ? 'admin' : 'user'}
           />
 
           {user?.role === 'ADMIN' && <AdminUsers canManage={true} />}

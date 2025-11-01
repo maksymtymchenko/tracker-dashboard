@@ -34,6 +34,16 @@ export async function fetchScreenshots(params: Partial<{ page: number; limit: nu
   return data;
 }
 
+export async function deleteScreenshot(filename: string) {
+  const { data } = await api.delete<{ success: boolean; message: string; filename: string }>(`/api/screenshots/${encodeURIComponent(filename)}`);
+  return data;
+}
+
+export async function bulkDeleteScreenshots(filenames: string[]) {
+  const { data } = await api.delete<{ ok: boolean; deleted: number }>('/api/screenshots', { data: { filenames } });
+  return data;
+}
+
 export async function fetchTopDomains(limit = 10) {
   const { data } = await api.get<{ items: TopDomainItem[] }>('/api/analytics/top-domains', { params: { limit } });
   return data.items;

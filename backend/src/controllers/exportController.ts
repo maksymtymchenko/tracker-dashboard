@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { EventModel } from '../models/Event';
+import { EventModel } from '../models/Event.js';
 
 export async function exportJSON(req: Request, res: Response) {
   const filter: Record<string, unknown> = {};
@@ -16,7 +16,7 @@ export async function exportCSV(req: Request, res: Response) {
   const items = await EventModel.find(filter).lean();
   const header = 'time,user,department,application,domain,type,duration,details\n';
   const rows = items
-    .map((i) => [
+    .map((i: any) => [
       new Date(i.time as any).toISOString(),
       i.username || '',
       i.department || '',
@@ -26,7 +26,7 @@ export async function exportCSV(req: Request, res: Response) {
       (i.duration as any) ?? '',
       JSON.stringify(i.details ?? {}),
     ]
-      .map((v) => '"' + String(v).replaceAll('"', '""') + '"')
+      .map((v) => '"' + String(v).replace(/"/g, '""') + '"')
       .join(','))
     .join('\n');
   res.setHeader('Content-Type', 'text/csv');

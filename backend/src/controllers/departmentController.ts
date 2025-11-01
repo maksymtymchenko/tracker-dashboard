@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { DepartmentModel, UserDepartmentModel } from '../models/Department.js';
-import { EventModel } from '../models/Event';
+import { EventModel } from '../models/Event.js';
 
 export async function listDepartments(_req: Request, res: Response) {
   const items = await DepartmentModel.find().lean();
@@ -144,7 +144,7 @@ export async function allDepartmentsAnalytics(req: Request, res: Response) {
 
   // Create map of username -> stats
   const userStats = new Map<string, { events: number; duration: number; uniqueDomains: number }>();
-  eventsByUser.forEach((stat) => {
+  eventsByUser.forEach((stat: any) => {
     userStats.set(stat.username, {
       events: stat.events || 0,
       duration: stat.duration || 0,
@@ -161,7 +161,7 @@ export async function allDepartmentsAnalytics(req: Request, res: Response) {
   ]);
 
   const userDomains = new Map<string, Set<string>>();
-  domainsByUser.forEach((item) => {
+  domainsByUser.forEach((item: any) => {
     userDomains.set(item.username, new Set(item.domains));
   });
 

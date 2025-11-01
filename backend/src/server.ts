@@ -7,11 +7,11 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import router from './routes/index';
-import { errorHandler } from './middleware/errorHandler';
-import { connectToDatabase } from './utils/db';
+import router from './routes/index.js';
+import { errorHandler } from './middleware/errorHandler.js';
+import { connectToDatabase } from './utils/db.js';
 import { ensureDefaultAdmin } from './utils/auth.js';
-import { getScreenshotsDir } from './utils/paths';
+import { getScreenshotsDir } from './utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

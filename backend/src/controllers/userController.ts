@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { UserModel } from '../models/User';
-import { hashPassword } from '../utils/auth';
-import { EventModel } from '../models/Event';
-import { ScreenshotModel } from '../models/Screenshot';
+import { UserModel } from '../models/User.js';
+import { hashPassword } from '../utils/auth.js';
+import { EventModel } from '../models/Event.js';
+import { ScreenshotModel } from '../models/Screenshot.js';
 
 export async function listUsers(_req: Request, res: Response) {
   const users = await UserModel.find({}, { password: 0 }).lean();

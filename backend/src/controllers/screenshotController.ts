@@ -3,8 +3,8 @@ import { z } from 'zod';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { ScreenshotModel } from '../models/Screenshot';
-import { getScreenshotsDir } from '../utils/paths';
+import { ScreenshotModel } from '../models/Screenshot.js';
+import { getScreenshotsDir } from '../utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,7 +56,7 @@ export async function listScreenshots(req: Request, res: Response) {
     ScreenshotModel.countDocuments(filter),
   ]);
 
-  const files = items.map((s) => ({ filename: s.filename, url: s.url, mtime: (s.mtime as any)?.valueOf?.() || new Date(s.mtime as any).getTime() }));
+  const files = items.map((s: any) => ({ filename: s.filename, url: s.url, mtime: (s.mtime as any)?.valueOf?.() || new Date(s.mtime as any).getTime() }));
   return res.json({ items, total, page, limit, count: total, files });
 }
 

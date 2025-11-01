@@ -1,26 +1,26 @@
 import { Router, Request, Response } from 'express';
-import { requireAdmin, requireAuth } from '../middleware/auth';
-import { UserModel } from '../models/User';
-import { verifyPassword } from '../utils/auth';
+import { requireAdmin, requireAuth } from '../middleware/auth.js';
+import { UserModel } from '../models/User.js';
+import { verifyPassword } from '../utils/auth.js';
 import {
   collectActivity,
   listActivity,
   analyticsSummary,
   analyticsTopDomains,
   analyticsUsers,
-} from '../controllers/activityController';
+} from '../controllers/activityController.js';
 import {
   collectScreenshot,
   listScreenshots,
   deleteScreenshot,
   bulkDeleteScreenshots,
-} from '../controllers/screenshotController';
+} from '../controllers/screenshotController.js';
 import {
   listUsers,
   createUser,
   deleteUser,
   adminDeleteUserData,
-} from '../controllers/userController';
+} from '../controllers/userController.js';
 import {
   listDepartments,
   createDepartment,
@@ -32,16 +32,16 @@ import {
   usersInDepartment,
   filterUsersByDepartment,
   groupUsersByDepartment,
-} from '../controllers/departmentController';
+} from '../controllers/departmentController.js';
 import {
   departmentStats,
   allDepartmentsAnalytics,
   searchDepartments,
   exportDepartments,
   importDepartments,
-} from '../controllers/departmentController';
-import { exportCSV, exportJSON } from '../controllers/exportController';
-import { EventModel } from '../models/Event';
+} from '../controllers/departmentController.js';
+import { exportCSV, exportJSON } from '../controllers/exportController.js';
+import { EventModel } from '../models/Event.js';
 
 const router = Router();
 

@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { EventModel } from '../models/Event';
+import { EventModel } from '../models/Event.js';
 import { UserModel } from '../models/User.js';
-import { ScreenshotModel } from '../models/Screenshot';
+import { ScreenshotModel } from '../models/Screenshot.js';
 import { DepartmentModel, UserDepartmentModel } from '../models/Department.js';
 
 const NewEventShape = z.object({
@@ -131,7 +131,7 @@ export async function listActivity(req: Request, res: Response) {
   ]);
 
   // enrich with department names based on latest user-department mapping
-  const usernames = Array.from(new Set(events.map((e) => e.username).filter(Boolean))) as string[];
+  const usernames = Array.from(new Set(events.map((e: any) => e.username).filter(Boolean))) as string[];
   const userDeps = await UserDepartmentModel.find({ username: { $in: usernames } }).lean();
   const deptIds = Array.from(new Set(userDeps.map((ud) => String(ud.departmentId))));
   const depts = await DepartmentModel.find({ _id: { $in: deptIds } }).lean();
@@ -159,7 +159,7 @@ export async function listActivity(req: Request, res: Response) {
   };
 
   // map DB schema to frontend ActivityItem shape
-  const items = events.map((e) => ({
+  const items = events.map((e: any) => ({
     _id: (e as any)._id,
     time: (e.timestamp as any)?.toISOString?.() || new Date(e.timestamp as any).toISOString(),
     username: e.username as any,
@@ -198,7 +198,7 @@ export async function listActivity(req: Request, res: Response) {
       },
     ]);
     const stats = agg[0] || { totalEvents: 0, uniqueUsers: 0, uniqueDomains: 0, totalDuration: 0, averageDuration: 0 };
-    const legacyEvents = events.map((e) => ({
+    const legacyEvents = events.map((e: any) => ({
       username: e.username,
       domain: e.domain,
       durationMs: e.durationMs,
@@ -287,7 +287,7 @@ export async function analyticsTopDomains(req: Request, res: Response) {
     { $sort: { totalTime: -1 } },
     { $limit: limit },
   ]);
-  const domains = agg.map((d) => ({
+  const domains = agg.map((d: any) => ({
     domain: d._id as string,
     totalTime: d.totalTime as number,
     visitCount: d.visitCount as number,
@@ -295,7 +295,7 @@ export async function analyticsTopDomains(req: Request, res: Response) {
     totalTimeMinutes: Math.round((d.totalTime as number) / 60000),
     averageTimeMinutes: Math.round(((d.totalTime as number) / Math.max(1, d.visitCount as number)) / 60000),
   }));
-  return res.json({ domains, items: domains.map((d) => ({ domain: d.domain, count: d.visitCount })) });
+  return res.json({ domains, items: domains.map((d: any) => ({ domain: d.domain, count: d.visitCount })) });
 }
 
 export async function analyticsUsers(_req: Request, res: Response) {
@@ -304,7 +304,7 @@ export async function analyticsUsers(_req: Request, res: Response) {
     { $project: { username: '$_id', _id: 0, events: 1, totalTime: 1, domains: 1, domainsCount: { $size: { $setDifference: ['$domains', [null]] } } } },
     { $sort: { events: -1 } },
   ]);
-  const users = agg.map((u) => ({ ...u, avgTime: u.events ? Math.round((u.totalTime as number) / (u.events as number)) : 0 }));
+  const users = agg.map((u: any) => ({ ...u, avgTime: u.events ? Math.round((u.totalTime as number) / (u.events as number)) : 0 }));
   return res.json({ users, items: users });
 }
 

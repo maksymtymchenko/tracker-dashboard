@@ -69,6 +69,7 @@ function App(): JSX.Element {
           limit: activityLimit,
           timeRange: (filters.timeRange as any) || 'all',
           user: filters.user || undefined,
+          department: filters.department || undefined,
           domain: filters.domain || undefined,
           type: filters.type || undefined,
         }),

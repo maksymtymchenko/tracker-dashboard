@@ -61,6 +61,7 @@ export async function listActivity(req: Request, res: Response) {
   const querySchema = z.object({
     user: z.string().optional(),
     username: z.string().optional(),
+    department: z.string().optional(),
     domain: z.string().optional(),
     type: z.string().optional(),
     page: z.coerce.number().default(1),
@@ -74,6 +75,33 @@ export async function listActivity(req: Request, res: Response) {
   else if (q.user) filter.username = q.user;
   if (q.domain) filter.domain = q.domain;
   if (q.type) filter.type = q.type;
+
+  // Handle department filtering
+  if (q.department) {
+    const department = await DepartmentModel.findOne({ name: q.department }).lean();
+    if (department) {
+      const userDepts = await UserDepartmentModel.find({ departmentId: (department as any)._id }).lean();
+      const departmentUsernames = Array.from(new Set(userDepts.map((ud) => ud.username))).filter(Boolean) as string[];
+      if (departmentUsernames.length > 0) {
+        // If username filter is already set, intersect with department users
+        if (filter.username) {
+          if (!departmentUsernames.includes(filter.username as string)) {
+            // User is not in this department, return empty results
+            return res.json({ items: [], page: q.page, limit: q.limit || 20, total: 0, count: 0, stats: { totalEvents: 0, uniqueUsers: 0, uniqueDomains: 0, totalDuration: 0, averageDuration: 0 } });
+          }
+        } else {
+          // Filter by all users in this department
+          filter.username = { $in: departmentUsernames };
+        }
+      } else {
+        // No users in this department, return empty results
+        return res.json({ items: [], page: q.page, limit: q.limit || 20, total: 0, count: 0, stats: { totalEvents: 0, uniqueUsers: 0, uniqueDomains: 0, totalDuration: 0, averageDuration: 0 } });
+      }
+    } else {
+      // Department not found, return empty results
+      return res.json({ items: [], page: q.page, limit: q.limit || 20, total: 0, count: 0, stats: { totalEvents: 0, uniqueUsers: 0, uniqueDomains: 0, totalDuration: 0, averageDuration: 0 } });
+    }
+  }
 
   const now = new Date();
   if (q.timeRange && q.timeRange !== 'all') {

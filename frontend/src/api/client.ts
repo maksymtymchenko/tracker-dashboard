@@ -22,7 +22,7 @@ export async function fetchSummary() {
   return data;
 }
 
-export async function fetchActivity(params: Partial<{ user: string; username: string; domain: string; type: string; page: number; limit: number; timeRange: 'all' | 'today' | 'week' | 'month' }>) {
+export async function fetchActivity(params: Partial<{ user: string; username: string; department: string; domain: string; type: string; page: number; limit: number; timeRange: 'all' | 'today' | 'week' | 'month' }>) {
   const query = { ...params } as any;
   if (params?.user && !params?.username) query.username = params.user; // prefer username param on backend
   const { data } = await api.get<Paginated<ActivityItem>>('/api/activity', { params: query });
@@ -95,6 +95,16 @@ export async function listDistinctUsers() {
       const agg = await fetchUsersAnalytics();
       return agg.map((u) => u.username);
     }
+  }
+}
+
+export async function listDistinctDomains() {
+  // Get distinct domains from events
+  try {
+    const { data } = await api.get<{ domains: string[] }>('/api/domains/distinct');
+    return data.domains;
+  } catch {
+    return [];
   }
 }
 

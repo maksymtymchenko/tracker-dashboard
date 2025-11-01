@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { listDepartments, listDistinctDomains } from 'src/api/client';
+import { Department } from 'src/types';
 
 export interface ActivityFilterState {
   search?: string;
@@ -22,6 +24,40 @@ interface Props {
 
 export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, onRefresh, loading, onManageDepartments, usersOptions = [] }: Props): JSX.Element {
   const [draft, setDraft] = useState<ActivityFilterState>(value);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [loadingDepartments, setLoadingDepartments] = useState(false);
+  const [domains, setDomains] = useState<string[]>([]);
+  const [loadingDomains, setLoadingDomains] = useState(false);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      setLoadingDepartments(true);
+      try {
+        const deps = await listDepartments();
+        setDepartments(deps);
+      } catch (e) {
+        console.error('Failed to load departments:', e);
+      } finally {
+        setLoadingDepartments(false);
+      }
+    };
+    loadDepartments();
+  }, []);
+
+  useEffect(() => {
+    const loadDomains = async () => {
+      setLoadingDomains(true);
+      try {
+        const doms = await listDistinctDomains();
+        setDomains(doms);
+      } catch (e) {
+        console.error('Failed to load domains:', e);
+      } finally {
+        setLoadingDomains(false);
+      }
+    };
+    loadDomains();
+  }, []);
 
   const apply = () => onChange(draft);
 
@@ -39,8 +75,18 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
         ) : (
           <input className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Username" value={draft.user || ''} onChange={(e) => setDraft({ ...draft, user: e.target.value })} />
         )}
-        <input className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Department" value={draft.department || ''} onChange={(e) => setDraft({ ...draft, department: e.target.value })} />
-        <input className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Domain" value={draft.domain || ''} onChange={(e) => setDraft({ ...draft, domain: e.target.value })} />
+        <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.department || ''} onChange={(e) => setDraft({ ...draft, department: e.target.value })} disabled={loadingDepartments}>
+          <option value="">All Departments</option>
+          {departments.map((d) => (
+            <option key={d._id} value={d.name}>{d.name}</option>
+          ))}
+        </select>
+        <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.domain || ''} onChange={(e) => setDraft({ ...draft, domain: e.target.value })} disabled={loadingDomains}>
+          <option value="">All Domains</option>
+          {domains.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
         <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.timeRange || 'all'} onChange={(e) => setDraft({ ...draft, timeRange: e.target.value as any })}>
           <option value="all">All Time</option>
           <option value="today">Today</option>

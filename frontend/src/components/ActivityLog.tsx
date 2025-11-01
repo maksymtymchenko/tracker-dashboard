@@ -91,7 +91,7 @@ export function ActivityLog({ data, loading, error, onRefresh, onPageChange }: P
                     <td className="py-2 pr-4">{row.application || '—'}</td>
                     <td className="py-2 pr-4">{row.domain || row.url || '—'}</td>
                     <td className="py-2 pr-4">{row.type}</td>
-                    <td className="py-2 pr-4">{row.duration ?? '—'}</td>
+                    <td className="py-2 pr-4">{row.duration != null ? formatDuration(row.duration) : '—'}</td>
                     <td className="py-2 pr-4">{row.details ? '…' : '—'}</td>
                     <td className="py-2 pr-4">
                       <button

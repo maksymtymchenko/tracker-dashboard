@@ -143,12 +143,28 @@ export async function listActivity(req: Request, res: Response) {
     if (name && !userToDeptName.has(ud.username)) userToDeptName.set(ud.username, name);
   });
 
+  // Helper function to extract application name from data/details
+  const extractApplication = (data: unknown): string | undefined => {
+    if (!data || typeof data !== 'object') return undefined;
+    const d = data as Record<string, unknown>;
+    // Try common field names for application
+    return (
+      (typeof d.application === 'string' ? d.application : undefined) ||
+      (typeof d.app === 'string' ? d.app : undefined) ||
+      (typeof d.appName === 'string' ? d.appName : undefined) ||
+      (typeof d.app_name === 'string' ? d.app_name : undefined) ||
+      // Sometimes title contains app name (e.g., "Chrome - Example.com")
+      (typeof d.title === 'string' && d.title.includes(' - ') ? d.title.split(' - ')[0] : undefined)
+    );
+  };
+
   // map DB schema to frontend ActivityItem shape
   const items = events.map((e) => ({
     _id: (e as any)._id,
     time: (e.timestamp as any)?.toISOString?.() || new Date(e.timestamp as any).toISOString(),
     username: e.username as any,
     department: userToDeptName.get(e.username as any),
+    application: extractApplication(e.data),
     domain: e.domain as any,
     type: (e.type as any) || 'window_activity',
     duration: (e.durationMs as any) ?? undefined,

@@ -1,10 +1,31 @@
 import axios from 'axios';
-import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, Department, UserDepartment, BasicUser, DepartmentAnalytics } from 'src/types';
+import {
+  ActivityItem,
+  Paginated,
+  SummaryResponse,
+  ScreenshotItem,
+  AuthUser,
+  TopDomainItem,
+  UserAggregateItem,
+  Department,
+  UserDepartment,
+  BasicUser,
+  DepartmentAnalytics,
+} from 'src/types';
 
-export const api = axios.create({ withCredentials: true });
+// Use environment variable for API URL, fallback to current origin for development
+const API_URL = import.meta.env.VITE_API_URL || '';
+
+export const api = axios.create({
+  baseURL: API_URL,
+  withCredentials: true,
+});
 
 export async function login(username: string, password: string) {
-  const { data } = await api.post<{ ok: boolean; user: AuthUser }>('/api/login', { username, password });
+  const { data } = await api.post<{ ok: boolean; user: AuthUser }>(
+    '/api/login',
+    { username, password },
+  );
   return data.user;
 }
 
@@ -13,7 +34,10 @@ export async function logout() {
 }
 
 export async function authStatus() {
-  const { data } = await api.get<{ authenticated: boolean; user: AuthUser | null }>('/api/auth/status');
+  const { data } = await api.get<{
+    authenticated: boolean;
+    user: AuthUser | null;
+  }>('/api/auth/status');
   return data;
 }
 
@@ -22,35 +46,67 @@ export async function fetchSummary() {
   return data;
 }
 
-export async function fetchActivity(params: Partial<{ user: string; username: string; department: string; domain: string; type: string; page: number; limit: number; timeRange: 'all' | 'today' | 'week' | 'month' }>) {
+export async function fetchActivity(
+  params: Partial<{
+    user: string;
+    username: string;
+    department: string;
+    domain: string;
+    type: string;
+    page: number;
+    limit: number;
+    timeRange: 'all' | 'today' | 'week' | 'month';
+  }>,
+) {
   const query = { ...params } as any;
   if (params?.user && !params?.username) query.username = params.user; // prefer username param on backend
-  const { data } = await api.get<Paginated<ActivityItem>>('/api/activity', { params: query });
+  const { data } = await api.get<Paginated<ActivityItem>>('/api/activity', {
+    params: query,
+  });
   return data;
 }
 
-export async function fetchScreenshots(params: Partial<{ page: number; limit: number; user: string }>) {
-  const { data } = await api.get<{ items: ScreenshotItem[]; total: number; page: number; limit: number }>('/api/screenshots', { params });
+export async function fetchScreenshots(
+  params: Partial<{ page: number; limit: number; user: string }>,
+) {
+  const { data } = await api.get<{
+    items: ScreenshotItem[];
+    total: number;
+    page: number;
+    limit: number;
+  }>('/api/screenshots', { params });
   return data;
 }
 
 export async function deleteScreenshot(filename: string) {
-  const { data } = await api.delete<{ success: boolean; message: string; filename: string }>(`/api/screenshots/${encodeURIComponent(filename)}`);
+  const { data } = await api.delete<{
+    success: boolean;
+    message: string;
+    filename: string;
+  }>(`/api/screenshots/${encodeURIComponent(filename)}`);
   return data;
 }
 
 export async function bulkDeleteScreenshots(filenames: string[]) {
-  const { data } = await api.delete<{ ok: boolean; deleted: number }>('/api/screenshots', { data: { filenames } });
+  const { data } = await api.delete<{ ok: boolean; deleted: number }>(
+    '/api/screenshots',
+    { data: { filenames } },
+  );
   return data;
 }
 
 export async function fetchTopDomains(limit = 10) {
-  const { data } = await api.get<{ items: TopDomainItem[] }>('/api/analytics/top-domains', { params: { limit } });
+  const { data } = await api.get<{ items: TopDomainItem[] }>(
+    '/api/analytics/top-domains',
+    { params: { limit } },
+  );
   return data.items;
 }
 
 export async function fetchUsersAnalytics() {
-  const { data } = await api.get<{ items: UserAggregateItem[] }>('/api/analytics/users');
+  const { data } = await api.get<{ items: UserAggregateItem[] }>(
+    '/api/analytics/users',
+  );
   return data.items;
 }
 
@@ -61,16 +117,24 @@ export async function listDepartments() {
 }
 
 export async function fetchDepartmentsAnalytics() {
-  const { data } = await api.get<{ departments: DepartmentAnalytics[] }>('/api/departments/analytics');
+  const { data } = await api.get<{ departments: DepartmentAnalytics[] }>(
+    '/api/departments/analytics',
+  );
   return data.departments;
 }
 
 export async function createDepartment(payload: Partial<Department>) {
-  const { data } = await api.post<{ ok: true; id: string }>('/api/departments', payload);
+  const { data } = await api.post<{ ok: true; id: string }>(
+    '/api/departments',
+    payload,
+  );
   return data.id;
 }
 
-export async function updateDepartment(id: string, payload: Partial<Department>) {
+export async function updateDepartment(
+  id: string,
+  payload: Partial<Department>,
+) {
   await api.put(`/api/departments/${id}`, payload);
 }
 
@@ -79,15 +143,23 @@ export async function deleteDepartment(id: string) {
 }
 
 export async function listUserDepartments() {
-  const { data } = await api.get<{ items: UserDepartment[] }>('/api/user-departments');
+  const { data } = await api.get<{ items: UserDepartment[] }>(
+    '/api/user-departments',
+  );
   return data.items;
 }
 
-export async function assignUserDepartment(payload: { username: string; departmentId: string }) {
+export async function assignUserDepartment(payload: {
+  username: string;
+  departmentId: string;
+}) {
   await api.post('/api/user-departments', payload);
 }
 
-export async function unassignUserDepartment(payload: { username: string; departmentId: string }) {
+export async function unassignUserDepartment(payload: {
+  username: string;
+  departmentId: string;
+}) {
   await api.delete('/api/user-departments', { data: payload });
 }
 
@@ -116,7 +188,9 @@ export async function listDistinctUsers() {
 export async function listDistinctDomains() {
   // Get distinct domains from events
   try {
-    const { data } = await api.get<{ domains: string[] }>('/api/domains/distinct');
+    const { data } = await api.get<{ domains: string[] }>(
+      '/api/domains/distinct',
+    );
     return data.domains;
   } catch {
     return [];
@@ -124,13 +198,15 @@ export async function listDistinctDomains() {
 }
 
 export async function deleteUserById(id: string) {
-  const { data } = await api.delete<{ ok: boolean; success: boolean }>(`/api/users/${id}`);
+  const { data } = await api.delete<{ ok: boolean; success: boolean }>(
+    `/api/users/${id}`,
+  );
   return data;
 }
 
 export async function adminDeleteUserAllData(username: string) {
-  const { data } = await api.delete<{ success: boolean; message: string }>(`/api/admin/delete-user/${encodeURIComponent(username)}`);
+  const { data } = await api.delete<{ success: boolean; message: string }>(
+    `/api/admin/delete-user/${encodeURIComponent(username)}`,
+  );
   return data;
 }
-
-

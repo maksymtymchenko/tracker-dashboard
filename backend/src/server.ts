@@ -39,6 +39,10 @@ app.use(helmet({
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
+// Ensure secure cookies work behind a reverse proxy (e.g., Render)
+// Required when using cookie.secure=true so Express trusts X-Forwarded-* headers
+app.set('trust proxy', 1);
+
 const sessionOptions: session.SessionOptions = {
   secret: process.env.SESSION_SECRET || 'dev_secret_change_me',
   resave: false,

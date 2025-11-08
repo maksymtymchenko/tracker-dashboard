@@ -6,11 +6,15 @@ interface Props {
   data: DepartmentAnalyticsType[];
   loading: boolean;
   error?: string;
+  onDepartmentClick?(departmentId: string, departmentName: string): void;
 }
 
-export function DepartmentAnalytics({ data, loading, error }: Props): JSX.Element {
+export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }: Props): JSX.Element {
   const [viewMode, setViewMode] = useState<'events' | 'duration' | 'users'>('events');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [pieHoverIndex, setPieHoverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -158,11 +162,57 @@ export function DepartmentAnalytics({ data, loading, error }: Props): JSX.Elemen
                       tick={{ fontSize: 10 }} 
                       label={{ value: getYAxisLabel(), angle: -90, position: 'insideLeft', style: { fontSize: '10px' } }} 
                     />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey={getBarDataKey()} radius={4}>
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
+                    <Tooltip 
+                      content={<CustomTooltip />}
+                      wrapperStyle={{ outline: 'none' }}
+                      contentStyle={{ 
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        boxShadow: 'none',
+                      }}
+                      cursor={{ fill: 'transparent' }}
+                    />
+                    <Bar 
+                      dataKey={getBarDataKey()} 
+                      radius={4}
+                      onClick={(entry: any) => {
+                        if (onDepartmentClick && entry) {
+                          const deptData = data.find((d) => d.name === entry.name);
+                          if (deptData) {
+                            const index = chartData.findIndex((d) => d.name === entry.name);
+                            setActiveIndex(index);
+                            setTimeout(() => setActiveIndex(null), 300);
+                            onDepartmentClick(deptData.id, deptData.name);
+                          }
+                        }
+                      }}
+                      style={{ cursor: onDepartmentClick ? 'pointer' : 'default' }}
+                    >
+                      {chartData.map((entry, index) => {
+                        const isHovered = hoverIndex === index;
+                        const isActive = activeIndex === index;
+                        const fillColor = isActive ? '#2563eb' : isHovered ? entry.color : entry.color;
+                        const opacity = isHovered || isActive ? 1 : 0.88;
+                        const scale = isHovered || isActive ? 1.08 : 1;
+                        
+                        return (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={fillColor}
+                            opacity={opacity}
+                            onMouseEnter={() => setHoverIndex(index)}
+                            onMouseLeave={() => setHoverIndex(null)}
+                            style={{
+                              transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                              transform: `scaleY(${scale})`,
+                              transformOrigin: 'bottom',
+                              cursor: onDepartmentClick ? 'pointer' : 'default',
+                              filter: isHovered ? 'brightness(1.08)' : 'none',
+                            }}
+                          />
+                        );
+                      })}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -185,11 +235,52 @@ export function DepartmentAnalytics({ data, loading, error }: Props): JSX.Elemen
                       fill="#8884d8"
                       dataKey="value"
                     >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
+                      {pieData.map((entry, index) => {
+                        const isHovered = pieHoverIndex === index;
+                        const scale = isHovered ? 1.04 : 1;
+                        const opacity = isHovered ? 1 : 0.92;
+                        
+                        return (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={entry.color}
+                            opacity={opacity}
+                            onMouseEnter={() => setPieHoverIndex(index)}
+                            onMouseLeave={() => setPieHoverIndex(null)}
+                            style={{
+                              transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                              transform: `scale(${scale})`,
+                              transformOrigin: 'center',
+                              cursor: 'pointer',
+                              filter: isHovered ? 'brightness(1.12) drop-shadow(0 4px 8px rgba(0,0,0,0.15))' : 'none',
+                            }}
+                          />
+                        );
+                      })}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip 
+                      content={({ active, payload }: any) => {
+                        if (!active || !payload || !payload[0]) return null;
+                        const data = payload[0];
+                        return (
+                          <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg text-sm">
+                            <div className="font-medium mb-1" style={{ color: data.color }}>
+                              {data.name}
+                            </div>
+                            <div className="text-gray-600 dark:text-gray-300">
+                              Value: <span className="font-semibold">{data.value}</span>
+                            </div>
+                          </div>
+                        );
+                      }}
+                      wrapperStyle={{ outline: 'none' }}
+                      contentStyle={{ 
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        boxShadow: 'none',
+                      }}
+                    />
                     <Legend wrapperStyle={{ fontSize: '10px' }} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -199,35 +290,47 @@ export function DepartmentAnalytics({ data, loading, error }: Props): JSX.Elemen
 
           {/* Department Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
-            {chartData.map((dept) => (
-              <div
-                key={dept.name}
-                className="p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50"
-                style={{ borderLeftColor: dept.color, borderLeftWidth: '4px' }}
-              >
-                <div className="font-medium mb-2 text-sm sm:text-base" style={{ color: dept.color }}>
-                  {dept.name}
+            {chartData.map((dept, index) => {
+              const deptData = data.find((d) => d.name === dept.name);
+              return (
+                <div
+                  key={dept.name}
+                  className={`p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 transition-all ${
+                    onDepartmentClick ? 'cursor-pointer hover:shadow-md hover:scale-105' : ''
+                  }`}
+                  style={{ borderLeftColor: dept.color, borderLeftWidth: '4px' }}
+                  onClick={() => {
+                    if (onDepartmentClick && deptData) {
+                      setActiveIndex(index);
+                      setTimeout(() => setActiveIndex(null), 300);
+                      onDepartmentClick(deptData.id, deptData.name);
+                    }
+                  }}
+                >
+                  <div className="font-medium mb-2 text-sm sm:text-base" style={{ color: dept.color }}>
+                    {dept.name}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400 text-xs">Events</div>
+                      <div className="font-semibold text-sm sm:text-base">{dept.events.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400 text-xs">Duration</div>
+                      <div className="font-semibold text-sm sm:text-base">{formatHours(dept.duration)}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400 text-xs">Users</div>
+                      <div className="font-semibold text-sm sm:text-base">{dept.users}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500 dark:text-gray-400 text-xs">Domains</div>
+                      <div className="font-semibold text-sm sm:text-base">{dept.uniqueDomains}</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
-                  <div>
-                    <div className="text-gray-500 dark:text-gray-400 text-xs">Events</div>
-                    <div className="font-semibold text-sm sm:text-base">{dept.events.toLocaleString()}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 dark:text-gray-400 text-xs">Duration</div>
-                    <div className="font-semibold text-sm sm:text-base">{formatHours(dept.duration)}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 dark:text-gray-400 text-xs">Users</div>
-                    <div className="font-semibold text-sm sm:text-base">{dept.users}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-500 dark:text-gray-400 text-xs">Domains</div>
-                    <div className="font-semibold text-sm sm:text-base">{dept.uniqueDomains}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

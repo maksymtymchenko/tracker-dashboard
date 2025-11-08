@@ -10,6 +10,8 @@ import { ActivityFilters, ActivityFilterState } from 'src/components/ActivityFil
 import { AdminUsers } from 'src/components/AdminUsers';
 import { DepartmentsModal } from 'src/components/DepartmentsModal';
 import { DepartmentAnalytics } from 'src/components/DepartmentAnalytics';
+import { UserDetailsModal } from 'src/components/UserDetailsModal';
+import { DepartmentUsersModal } from 'src/components/DepartmentUsersModal';
 import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, fetchDepartmentsAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout } from 'src/api/client';
 import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, DepartmentAnalytics as DepartmentAnalyticsType } from 'src/types';
 
@@ -43,6 +45,8 @@ function App(): JSX.Element {
   const [filters, setFilters] = useState<ActivityFilterState>({ timeRange: 'all' });
   const [showDepartments, setShowDepartments] = useState(false);
   const [usersOptions, setUsersOptions] = useState<string[]>([]);
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -137,7 +141,16 @@ function App(): JSX.Element {
       setDeptAnalyticsError(undefined);
       setDeptAnalyticsLoading(true);
       try {
-        setDeptAnalytics(await fetchDepartmentsAnalytics());
+        const depts = await fetchDepartmentsAnalytics();
+        // Prioritize Analytics department - move it to the top
+        const sorted = [...depts].sort((a, b) => {
+          const aIsAnalytics = a.name.toLowerCase() === 'analytics';
+          const bIsAnalytics = b.name.toLowerCase() === 'analytics';
+          if (aIsAnalytics && !bIsAnalytics) return -1;
+          if (!aIsAnalytics && bIsAnalytics) return 1;
+          return b.events - a.events; // Sort by events descending
+        });
+        setDeptAnalytics(sorted);
       } catch (e: unknown) {
         setDeptAnalyticsError(e instanceof Error ? e.message : 'Failed to load');
       } finally {
@@ -182,7 +195,12 @@ function App(): JSX.Element {
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2">
-              <DomainActivityChart data={usersAgg} loading={usersAggLoading} error={usersAggError} />
+              <DomainActivityChart 
+                data={usersAgg} 
+                loading={usersAggLoading} 
+                error={usersAggError}
+                onUserClick={(username) => setSelectedUser(username)}
+              />
             </div>
             <div>
               <UsersOverview data={usersAgg} loading={usersAggLoading} error={usersAggError} />
@@ -191,7 +209,15 @@ function App(): JSX.Element {
 
           {deptAnalytics.length > 0 && (
             <section>
-              <DepartmentAnalytics data={deptAnalytics} loading={deptAnalyticsLoading} error={deptAnalyticsError} />
+              <DepartmentAnalytics 
+                data={deptAnalytics} 
+                loading={deptAnalyticsLoading} 
+                error={deptAnalyticsError}
+                onDepartmentClick={(departmentId, departmentName) => {
+                  // Show users from this department
+                  setSelectedDepartment({ id: departmentId, name: departmentName });
+                }}
+              />
             </section>
           )}
 
@@ -236,6 +262,13 @@ function App(): JSX.Element {
           {(user?.role === 'ADMIN' || user?.role === 'admin') && <AdminUsers canManage={true} />}
         </main>
         <DepartmentsModal open={showDepartments} onClose={() => setShowDepartments(false)} />
+        <DepartmentUsersModal
+          departmentId={selectedDepartment?.id || null}
+          departmentName={selectedDepartment?.name || null}
+          onClose={() => setSelectedDepartment(null)}
+          onUserClick={(username) => setSelectedUser(username)}
+        />
+        <UserDetailsModal username={selectedUser} onClose={() => setSelectedUser(null)} />
       </div>
     </div>
   );

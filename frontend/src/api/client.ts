@@ -149,6 +149,13 @@ export async function listUserDepartments() {
   return data.items;
 }
 
+export async function getUsersByDepartment(departmentId: string) {
+  const { data } = await api.get<{ items: UserDepartment[]; users: string[] }>(
+    `/api/departments/${departmentId}/users`,
+  );
+  return data.users;
+}
+
 export async function assignUserDepartment(payload: {
   username: string;
   departmentId: string;

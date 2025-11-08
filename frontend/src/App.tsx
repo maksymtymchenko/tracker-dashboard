@@ -193,20 +193,6 @@ function App(): JSX.Element {
             />
           </section>
 
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
-              <DomainActivityChart 
-                data={usersAgg} 
-                loading={usersAggLoading} 
-                error={usersAggError}
-                onUserClick={(username) => setSelectedUser(username)}
-              />
-            </div>
-            <div>
-              <UsersOverview data={usersAgg} loading={usersAggLoading} error={usersAggError} />
-            </div>
-          </section>
-
           {deptAnalytics.length > 0 && (
             <section>
               <DepartmentAnalytics 
@@ -220,6 +206,20 @@ function App(): JSX.Element {
               />
             </section>
           )}
+
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+              <DomainActivityChart 
+                data={usersAgg} 
+                loading={usersAggLoading} 
+                error={usersAggError}
+                onUserClick={(username) => setSelectedUser(username)}
+              />
+            </div>
+            <div>
+              <UsersOverview data={usersAgg} loading={usersAggLoading} error={usersAggError} />
+            </div>
+          </section>
 
           <section className="p-4 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800">
             <div className="font-medium mb-3">Activity Log</div>

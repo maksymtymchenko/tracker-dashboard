@@ -11,7 +11,7 @@ import router from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { connectToDatabase } from './utils/db.js';
 import { ensureDefaultAdmin } from './utils/auth.js';
-import { getScreenshotsDir } from './utils/paths.js';
+import { r2Storage } from './utils/r2Storage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,15 +66,8 @@ if (process.env.MONGO_URI) {
 }
 app.use(session(sessionOptions));
 
-// Static screenshots folder (with cache headers)
-app.use(
-  '/screenshots',
-  express.static(getScreenshotsDir(), {
-    maxAge: '1h',
-    etag: true,
-    index: false,
-  }),
-);
+// Screenshots are now served exclusively from Cloudflare R2
+// No local filesystem storage or static file serving
 
 // API routes
 app.use('/', router);

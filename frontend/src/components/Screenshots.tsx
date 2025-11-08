@@ -73,10 +73,17 @@ export function Screenshots({ items, loading, error, onRefresh, page = 1, limit 
                 <button onClick={() => setOpen(s.filename)} className="text-left w-full">
                   <div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden ring-1 ring-transparent group-hover:ring-blue-300/40 transition-all relative">
                     <img
-                      src={`/screenshots/${s.filename}`}
+                      src={s.url || `/screenshots/${s.filename}`}
                       alt={s.filename}
                       loading="lazy"
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                      onError={(e) => {
+                        // Fallback to relative path if R2 URL fails
+                        const target = e.target as HTMLImageElement;
+                        if (s.url && s.url !== `/screenshots/${s.filename}`) {
+                          target.src = `/screenshots/${s.filename}`;
+                        }
+                      }}
                     />
                     {isAdmin && (
                       <button
@@ -122,7 +129,11 @@ export function Screenshots({ items, loading, error, onRefresh, page = 1, limit 
         <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setOpen(null)}>
           <div className="absolute inset-0 bg-black/60" />
           <div className="relative max-w-6xl w-[92vw] h-[92vh] bg-black/80 rounded-xl overflow-hidden shadow-2xl border border-white/10">
-            <img src={`/screenshots/${open}`} alt={open} className="w-full h-full object-contain" />
+            <img 
+              src={items.find(s => s.filename === open)?.url || `/screenshots/${open}`} 
+              alt={open} 
+              className="w-full h-full object-contain" 
+            />
             <div className="absolute top-2 right-2 flex gap-2">
               {isAdmin && (
                 <button

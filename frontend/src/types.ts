@@ -30,10 +30,12 @@ export interface SummaryResponse {
 
 export interface ScreenshotItem {
   filename: string;
+  url?: string;
   username: string;
   domain?: string;
   deviceId?: string;
   createdAt?: string;
+  mtime?: number;
 }
 
 export interface TopDomainItem { domain: string; count: number }

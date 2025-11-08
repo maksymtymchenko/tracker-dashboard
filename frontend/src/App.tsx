@@ -182,7 +182,7 @@ function App(): JSX.Element {
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2">
-              <DomainActivityChart data={topDomains} loading={topDomainsLoading} error={topDomainsError} />
+              <DomainActivityChart data={usersAgg} loading={usersAggLoading} error={usersAggError} />
             </div>
             <div>
               <UsersOverview data={usersAgg} loading={usersAggLoading} error={usersAggError} />

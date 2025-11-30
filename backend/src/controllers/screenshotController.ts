@@ -79,12 +79,16 @@ export async function listScreenshots(req: Request, res: Response) {
       return {
         filename: s.filename,
         url,
+        username: s.username,
+        domain: s.domain,
+        deviceId: s.deviceId,
         mtime: (s.mtime as any)?.valueOf?.() || new Date(s.mtime as any).getTime(),
       };
     })
   );
 
-  return res.json({ items, total, page, limit, count: total, files });
+  // Return processed items with signed URLs in the items array for frontend compatibility
+  return res.json({ items: files, total, page, limit, count: total, files });
 }
 
 export async function deleteScreenshot(req: Request, res: Response) {

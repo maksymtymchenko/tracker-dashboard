@@ -71,10 +71,15 @@ export async function fetchScreenshots(
 ) {
   const { data } = await api.get<{
     items: ScreenshotItem[];
+    files?: ScreenshotItem[];
     total: number;
     page: number;
     limit: number;
   }>('/api/screenshots', { params });
+  // Use files array if available (has signed URLs), otherwise use items
+  if (data.files && data.files.length > 0) {
+    return { ...data, items: data.files };
+  }
   return data;
 }
 

@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ActivityItem, Paginated } from 'src/types';
+import { fetchScreenshots } from 'src/api/client';
 
 type ViewMode = 'table' | 'card' | 'timeline';
 type SortField = 'time' | 'username' | 'domain' | 'type' | 'duration';
@@ -27,6 +28,8 @@ export function ActivityLog({
   const [sortField, setSortField] = useState<SortField>('time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [searchQuery, setSearchQuery] = useState('');
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const [loadingScreenshot, setLoadingScreenshot] = useState(false);
 
   const formatDuration = (ms: number): string => {
     if (!Number.isFinite(ms) || ms < 0) return String(ms);
@@ -164,6 +167,20 @@ export function ActivityLog({
     return filtered;
   }, [data?.items, searchQuery, sortField, sortDirection]);
 
+  // Keyboard support for closing screenshot lightbox
+  useEffect(() => {
+    if (!screenshotUrl) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setScreenshotUrl(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [screenshotUrl]);
+
   const renderDetailValue = (key: string, value: unknown): JSX.Element => {
     if (key === 'url' && typeof value === 'string') {
       return (
@@ -206,6 +223,177 @@ export function ActivityLog({
       }
     }
     return <span className="break-words">{String(value)}</span>;
+  };
+
+  /**
+   * Extract screenshot filename or URL from event details
+   */
+  const getScreenshotInfo = (event: ActivityItem): { filename?: string; url?: string } | null => {
+    if (event.type !== 'screenshot') return null;
+
+    // Check if details contain screenshot information
+    if (event.details && typeof event.details === 'object') {
+      const details = event.details as Record<string, unknown>;
+      // Check for common field names
+      if (typeof details.filename === 'string') {
+        return { filename: details.filename };
+      }
+      if (typeof details.screenshot === 'string') {
+        return { filename: details.screenshot };
+      }
+      if (typeof details.url === 'string' && details.url.includes('.png')) {
+        return { url: details.url };
+      }
+      if (typeof details.screenshotUrl === 'string') {
+        return { url: details.screenshotUrl };
+      }
+      // Check nested objects
+      if (details.screenshot && typeof details.screenshot === 'object') {
+        const screenshot = details.screenshot as Record<string, unknown>;
+        if (typeof screenshot.filename === 'string') {
+          return { filename: screenshot.filename };
+        }
+        if (typeof screenshot.url === 'string') {
+          return { url: screenshot.url };
+        }
+      }
+    }
+
+    return null;
+  };
+
+  /**
+   * Extract timestamp from screenshot filename
+   * Filenames are typically: {timestamp}_{deviceId}_{hostname}_{platform}.png
+   */
+  const extractTimestampFromFilename = (filename: string): number | null => {
+    const match = filename.match(/^(\d+)_/);
+    if (match && match[1]) {
+      const timestamp = parseInt(match[1], 10);
+      if (!isNaN(timestamp) && timestamp > 0) {
+        return timestamp;
+      }
+    }
+    return null;
+  };
+
+  /**
+   * Find screenshot by matching username and time
+   */
+  const findScreenshotByTime = async (event: ActivityItem): Promise<string | null> => {
+    try {
+      setLoadingScreenshot(true);
+      const eventTime = new Date(event.time).getTime();
+      // Search within a 30 minute window (more lenient)
+      const timeWindow = 30 * 60 * 1000;
+      
+      // Fetch screenshots for this user
+      const result = await fetchScreenshots({
+        user: event.username,
+        limit: 100, // Get more screenshots to increase chances of finding a match
+      });
+
+      if (!result.items || result.items.length === 0) {
+        console.log('No screenshots found for user:', event.username);
+        return null;
+      }
+
+      // Find screenshot closest to event time
+      let closestScreenshot: { url?: string; filename: string; mtime?: number } | null = null;
+      let minTimeDiff = Infinity;
+
+      for (const screenshot of result.items) {
+        let screenshotTime: number | null = null;
+
+        // Try to get time from mtime first
+        if (screenshot.mtime) {
+          // Handle both Date objects and timestamps
+          screenshotTime = typeof screenshot.mtime === 'number' 
+            ? screenshot.mtime 
+            : new Date(screenshot.mtime).getTime();
+        } else {
+          // Fallback: extract timestamp from filename
+          screenshotTime = extractTimestampFromFilename(screenshot.filename);
+        }
+
+        if (screenshotTime && !isNaN(screenshotTime)) {
+          const timeDiff = Math.abs(screenshotTime - eventTime);
+          
+          // Also check if domain matches (if available)
+          const domainMatches = !event.domain || !screenshot.domain || 
+                                screenshot.domain === event.domain;
+
+          // Only consider screenshots within the time window
+          if (timeDiff <= timeWindow && timeDiff < minTimeDiff && domainMatches) {
+            minTimeDiff = timeDiff;
+            closestScreenshot = screenshot;
+          }
+        }
+      }
+
+      // If no match found within time window, try to get the most recent screenshot
+      // that matches the domain (if available)
+      if (!closestScreenshot && result.items.length > 0) {
+        for (const screenshot of result.items) {
+          const domainMatches = !event.domain || !screenshot.domain || 
+                                screenshot.domain === event.domain;
+          if (domainMatches) {
+            closestScreenshot = screenshot;
+            break; // Take the first one (they're sorted by mtime desc)
+          }
+        }
+      }
+
+      // If still no match, just take the most recent screenshot for this user
+      if (!closestScreenshot && result.items.length > 0) {
+        closestScreenshot = result.items[0];
+      }
+
+      if (closestScreenshot) {
+        const url = closestScreenshot.url || `/screenshots/${closestScreenshot.filename}`;
+        console.log('Found screenshot:', closestScreenshot.filename, 'URL:', url);
+        return url;
+      }
+
+      console.log('No matching screenshot found for event:', event);
+    } catch (error) {
+      console.error('Failed to find screenshot:', error);
+    } finally {
+      setLoadingScreenshot(false);
+    }
+    return null;
+  };
+
+  /**
+   * Handle viewing screenshot for a screenshot event
+   */
+  const handleViewScreenshot = async (event: ActivityItem) => {
+    // First try to get screenshot info from event details
+    const screenshotInfo = getScreenshotInfo(event);
+    if (screenshotInfo) {
+      if (screenshotInfo.url) {
+        setScreenshotUrl(screenshotInfo.url);
+        return;
+      } else if (screenshotInfo.filename) {
+        setScreenshotUrl(`/screenshots/${screenshotInfo.filename}`);
+        return;
+      }
+    }
+
+    // If not found in details, try to find by username and time
+    const foundUrl = await findScreenshotByTime(event);
+    if (foundUrl) {
+      setScreenshotUrl(foundUrl);
+    } else {
+      // Show a more helpful error message
+      alert(
+        'Screenshot not found. This may happen if:\n' +
+        '- The screenshot was deleted\n' +
+        '- The screenshot was taken more than 30 minutes before/after this event\n' +
+        '- The screenshot is not associated with this user\n\n' +
+        'Try checking the Screenshots section for this user.'
+      );
+    }
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -745,6 +933,104 @@ export function ActivityLog({
                   </div>
                 </div>
               )}
+
+              {/* View Screenshot Button for Screenshot Events */}
+              {open.type === 'screenshot' && (
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+                  <button
+                    onClick={() => handleViewScreenshot(open)}
+                    disabled={loadingScreenshot}
+                    className="w-full px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-medium transition-colors flex items-center justify-center gap-2"
+                  >
+                    {loadingScreenshot ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                          />
+                        </svg>
+                        View Screenshot
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Screenshot Lightbox */}
+      {screenshotUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center"
+          onClick={() => setScreenshotUrl(null)}
+        >
+          <div className="absolute inset-0 bg-black/80" />
+          <div
+            className="relative max-w-7xl w-[95vw] h-[95vh] bg-black/90 rounded-xl overflow-hidden shadow-2xl border border-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={screenshotUrl}
+              alt="Screenshot"
+              className="w-full h-full object-contain"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                // Try fallback URL if the primary URL fails
+                if (screenshotUrl.startsWith('/screenshots/')) {
+                  // Already using fallback, show error message
+                  const errorDiv = document.createElement('div');
+                  errorDiv.className = 'absolute inset-0 flex items-center justify-center text-white';
+                  errorDiv.textContent = 'Screenshot not found';
+                  target.parentElement?.appendChild(errorDiv);
+                  target.style.display = 'none';
+                } else if (screenshotUrl.includes('/')) {
+                  // Extract filename and try fallback
+                  const filename = screenshotUrl.split('/').pop();
+                  if (filename) {
+                    target.src = `/screenshots/${filename}`;
+                  }
+                }
+              }}
+            />
+
+            {/* Info Panel */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
+              <div className="max-w-4xl mx-auto">
+                <div className="text-white mb-2 font-medium">
+                  Screenshot from {open?.username} • {open && formatTime(open.time)}
+                </div>
+                {open?.domain && (
+                  <div className="text-sm text-white/80">
+                    <span className="text-white/60">Domain:</span> {open.domain}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Close Button */}
+            <div className="absolute top-4 right-4 flex gap-2 z-10">
+              <button
+                className="px-4 py-2 rounded bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm text-sm transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setScreenshotUrl(null);
+                }}
+              >
+                Close (Esc)
+              </button>
             </div>
           </div>
         </div>

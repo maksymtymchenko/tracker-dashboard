@@ -1,5 +1,9 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { ActivityItem, Paginated } from 'src/types';
+
+type ViewMode = 'table' | 'card' | 'timeline';
+type SortField = 'time' | 'username' | 'domain' | 'type' | 'duration';
+type SortDirection = 'asc' | 'desc';
 
 interface Props {
   data: Paginated<ActivityItem> | null;
@@ -7,10 +11,23 @@ interface Props {
   error?: string;
   onRefresh(): void;
   onPageChange?(page: number): void;
+  onUserClick?(username: string): void;
 }
 
-export function ActivityLog({ data, loading, error, onRefresh, onPageChange }: Props): JSX.Element {
-  const [open, setOpen] = React.useState<ActivityItem | null>(null);
+export function ActivityLog({
+  data,
+  loading,
+  error,
+  onRefresh,
+  onPageChange,
+  onUserClick,
+}: Props): JSX.Element {
+  const [open, setOpen] = useState<ActivityItem | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [sortField, setSortField] = useState<SortField>('time');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [searchQuery, setSearchQuery] = useState('');
+
   const formatDuration = (ms: number): string => {
     if (!Number.isFinite(ms) || ms < 0) return String(ms);
     if (ms < 1000) return `${Math.round(ms)} ms`;
@@ -21,14 +38,141 @@ export function ActivityLog({ data, loading, error, onRefresh, onPageChange }: P
     if (minutes < 60) return `${minutes}m ${remSec}s`;
     const hours = Math.floor(minutes / 60);
     const remMin = minutes % 60;
-    return `${hours}h ${remMin}m ${remSec}s`;
+    return `${hours}h ${remMin}m`;
   };
 
+  const formatTime = (time: string): string => {
+    const date = new Date(time);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getActivityTypeIcon = (type: string): string => {
+    switch (type) {
+      case 'window_activity':
+        return '🪟';
+      case 'form_interaction':
+        return '📝';
+      case 'click':
+        return '🖱️';
+      case 'keypress':
+        return '⌨️';
+      case 'scroll':
+        return '📜';
+      case 'screenshot':
+        return '📸';
+      case 'clipboard':
+        return '📋';
+      default:
+        return '•';
+    }
+  };
+
+  const getActivityTypeColor = (type: string): string => {
+    switch (type) {
+      case 'window_activity':
+        return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300';
+      case 'form_interaction':
+        return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300';
+      case 'click':
+        return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300';
+      case 'keypress':
+        return 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300';
+      case 'scroll':
+        return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300';
+      case 'screenshot':
+        return 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300';
+      case 'clipboard':
+        return 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300';
+      default:
+        return 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+    }
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  // Sort and filter items
+  const processedItems = useMemo(() => {
+    if (!data?.items) return [];
+
+    let filtered = [...data.items];
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.username.toLowerCase().includes(query) ||
+          item.domain?.toLowerCase().includes(query) ||
+          item.application?.toLowerCase().includes(query) ||
+          item.type.toLowerCase().includes(query) ||
+          item.url?.toLowerCase().includes(query),
+      );
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+
+      switch (sortField) {
+        case 'time':
+          aVal = new Date(a.time).getTime();
+          bVal = new Date(b.time).getTime();
+          break;
+        case 'username':
+          aVal = a.username.toLowerCase();
+          bVal = b.username.toLowerCase();
+          break;
+        case 'domain':
+          aVal = (a.domain || '').toLowerCase();
+          bVal = (b.domain || '').toLowerCase();
+          break;
+        case 'type':
+          aVal = a.type.toLowerCase();
+          bVal = b.type.toLowerCase();
+          break;
+        case 'duration':
+          aVal = a.duration ?? 0;
+          bVal = b.duration ?? 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  }, [data?.items, searchQuery, sortField, sortDirection]);
+
   const renderDetailValue = (key: string, value: unknown): JSX.Element => {
-    // Known key formatting
     if (key === 'url' && typeof value === 'string') {
       return (
-        <a href={value} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 break-all underline">
+        <a
+          href={value}
+          target="_blank"
+          rel="noreferrer"
+          className="text-blue-600 dark:text-blue-400 break-all underline"
+        >
           {value}
         </a>
       );
@@ -37,97 +181,427 @@ export function ActivityLog({ data, loading, error, onRefresh, onPageChange }: P
       return <span className="font-medium break-words">{value}</span>;
     }
     if (key === 'reason' && typeof value === 'string') {
-      return <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs">{value}</span>;
+      return (
+        <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs">
+          {value}
+        </span>
+      );
     }
     if (key === 'deviceId' && typeof value === 'string') {
       return <code className="text-xs break-all">{value}</code>;
     }
     if (key === 'clipboard' && typeof value === 'string') {
-      return <pre className="text-xs whitespace-pre-wrap break-words bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-800">{value}</pre>;
+      return (
+        <pre className="text-xs whitespace-pre-wrap break-words bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-800">
+          {value}
+        </pre>
+      );
     }
 
-    // Fallbacks
     if (typeof value === 'object' && value !== null) {
       try {
-        return <span className="break-words">{JSON.stringify(value)}</span>;
+        return <span className="break-words">{JSON.stringify(value, null, 2)}</span>;
       } catch {
         return <span className="break-words">{String(value)}</span>;
       }
     }
     return <span className="break-words">{String(value)}</span>;
   };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) {
+      return <span className="text-gray-400">↕</span>;
+    }
+    return sortDirection === 'asc' ? <span>↑</span> : <span>↓</span>;
+  };
+
   return (
-    <section className="p-4 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800">
-      <div className="flex items-center justify-between mb-3">
-        <div className="font-medium">Activity Log</div>
-        <div className="flex gap-2">
-          <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700" onClick={onRefresh} disabled={loading}>
+    <div>
+      {/* Header Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            placeholder="Search activities..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent flex-1 min-w-[200px]"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden">
+            <button
+              className={`px-3 py-1.5 text-sm transition-colors ${
+                viewMode === 'table'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => setViewMode('table')}
+              title="Table view"
+            >
+              Table
+            </button>
+            <button
+              className={`px-3 py-1.5 text-sm transition-colors ${
+                viewMode === 'card'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => setViewMode('card')}
+              title="Card view"
+            >
+              Cards
+            </button>
+            <button
+              className={`px-3 py-1.5 text-sm transition-colors ${
+                viewMode === 'timeline'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              onClick={() => setViewMode('timeline')}
+              title="Timeline view"
+            >
+              Timeline
+            </button>
+          </div>
+          <button
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+            onClick={onRefresh}
+            disabled={loading}
+          >
             {loading ? 'Loading…' : 'Refresh'}
           </button>
         </div>
       </div>
+
       {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-left text-gray-500 dark:text-gray-400">
-            <tr>
-              {['Time', 'User', 'Department', 'Application', 'Domain/URL', 'Activity Type', 'Duration', 'Details', 'Actions'].map((h) => (
-                <th key={h} className="py-2 pr-4">
-                  {h}
+
+      {/* Table View */}
+      {viewMode === 'table' && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800">
+              <tr>
+                <th
+                  className="py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                  onClick={() => handleSort('time')}
+                >
+                  <div className="flex items-center gap-2">
+                    Time
+                    <SortIcon field="time" />
+                  </div>
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {!loading && data?.items?.length
-              ? data.items.map((row) => (
-                  <tr
-                    key={String(row._id) + row.time}
-                    className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50/70 dark:hover:bg-gray-900/60 transition-colors"
-                  >
-                    <td className="py-2 pr-4">{new Date(row.time).toLocaleString()}</td>
-                    <td className="py-2 pr-4">{row.username}</td>
-                    <td className="py-2 pr-4">{row.department || '—'}</td>
-                    <td className="py-2 pr-4">{row.application || '—'}</td>
-                    <td className="py-2 pr-4">{row.domain || row.url || '—'}</td>
-                    <td className="py-2 pr-4">{row.type}</td>
-                    <td className="py-2 pr-4">{row.duration != null ? formatDuration(row.duration) : '—'}</td>
-                    <td className="py-2 pr-4">{row.details ? '…' : '—'}</td>
-                    <td className="py-2 pr-4">
-                      <button
-                        className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
-                        onClick={() => setOpen(row)}
-                      >
-                        View
-                      </button>
+                <th
+                  className="py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                  onClick={() => handleSort('username')}
+                >
+                  <div className="flex items-center gap-2">
+                    User
+                    <SortIcon field="username" />
+                  </div>
+                </th>
+                <th className="py-3 px-4">Department</th>
+                <th className="py-3 px-4">Application</th>
+                <th
+                  className="py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                  onClick={() => handleSort('domain')}
+                >
+                  <div className="flex items-center gap-2">
+                    Domain/URL
+                    <SortIcon field="domain" />
+                  </div>
+                </th>
+                <th
+                  className="py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                  onClick={() => handleSort('type')}
+                >
+                  <div className="flex items-center gap-2">
+                    Type
+                    <SortIcon field="type" />
+                  </div>
+                </th>
+                <th
+                  className="py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                  onClick={() => handleSort('duration')}
+                >
+                  <div className="flex items-center gap-2">
+                    Duration
+                    <SortIcon field="duration" />
+                  </div>
+                </th>
+                <th className="py-3 px-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!loading && processedItems.length
+                ? processedItems.map((row) => (
+                    <tr
+                      key={String(row._id) + row.time}
+                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/70 dark:hover:bg-gray-900/60 transition-colors"
+                    >
+                      <td className="py-3 px-4">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {formatTime(row.time)}
+                        </div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500">
+                          {new Date(row.time).toLocaleString()}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        {onUserClick ? (
+                          <button
+                            onClick={() => onUserClick(row.username)}
+                            className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                          >
+                            {row.username}
+                          </button>
+                        ) : (
+                          <span className="font-medium">{row.username}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">{row.department || '—'}</td>
+                      <td className="py-3 px-4">{row.application || '—'}</td>
+                      <td className="py-3 px-4">
+                        {row.url ? (
+                          <a
+                            href={row.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:underline break-all text-xs"
+                          >
+                            {row.domain || row.url}
+                          </a>
+                        ) : (
+                          <span className="text-xs">{row.domain || '—'}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${getActivityTypeColor(
+                            row.type,
+                          )}`}
+                        >
+                          <span>{getActivityTypeIcon(row.type)}</span>
+                          {row.type.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {row.duration != null ? (
+                          <span className="text-xs">{formatDuration(row.duration)}</span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <button
+                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                          onClick={() => setOpen(row)}
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                : (
+                  <tr>
+                    <td className="py-8 px-4 text-center text-gray-500 dark:text-gray-400" colSpan={8}>
+                      {loading ? 'Loading…' : searchQuery ? 'No results found' : 'No data'}
                     </td>
                   </tr>
-                ))
-              : (
-                <tr className="border-t border-gray-100 dark:border-gray-800">
-                  <td className="py-6 pr-4 text-center text-gray-500 dark:text-gray-400" colSpan={9}>
-                    {loading ? 'Loading…' : 'No data'}
-                  </td>
-                </tr>
                 )}
-          </tbody>
-        </table>
-      </div>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Card View */}
+      {viewMode === 'card' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {!loading && processedItems.length
+            ? processedItems.map((row) => (
+                <div
+                  key={String(row._id) + row.time}
+                  className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${getActivityTypeColor(
+                        row.type,
+                      )}`}
+                    >
+                      <span>{getActivityTypeIcon(row.type)}</span>
+                      {row.type.replace('_', ' ')}
+                    </span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                      {formatTime(row.time)}
+                    </span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">User: </span>
+                      {onUserClick ? (
+                        <button
+                          onClick={() => onUserClick(row.username)}
+                          className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                        >
+                          {row.username}
+                        </button>
+                      ) : (
+                        <span className="font-medium">{row.username}</span>
+                      )}
+                    </div>
+                    {row.department && (
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Department: </span>
+                        <span>{row.department}</span>
+                      </div>
+                    )}
+                    {row.domain && (
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Domain: </span>
+                        <span className="break-all">{row.domain}</span>
+                      </div>
+                    )}
+                    {row.url && (
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">URL: </span>
+                        <a
+                          href={row.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 dark:text-blue-400 hover:underline break-all text-xs"
+                        >
+                          {row.url}
+                        </a>
+                      </div>
+                    )}
+                    {row.duration != null && (
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Duration: </span>
+                        <span>{formatDuration(row.duration)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    className="mt-3 w-full text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                    onClick={() => setOpen(row)}
+                  >
+                    View Details
+                  </button>
+                </div>
+              ))
+            : Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-48 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+              ))}
+        </div>
+      )}
+
+      {/* Timeline View */}
+      {viewMode === 'timeline' && (
+        <div className="relative">
+          <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-800" />
+          <div className="space-y-4">
+            {!loading && processedItems.length
+              ? processedItems.map((row, index) => (
+                  <div key={String(row._id) + row.time} className="relative flex gap-4">
+                    <div className="flex-shrink-0 w-16 text-right">
+                      <div className="sticky top-4">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {formatTime(row.time)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 w-4 h-4 rounded-full bg-blue-600 border-4 border-white dark:border-gray-900 mt-1 relative z-10" />
+                    <div className="flex-1 pb-4">
+                      <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:shadow-md transition-all">
+                        <div className="flex items-start justify-between mb-2">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${getActivityTypeColor(
+                              row.type,
+                            )}`}
+                          >
+                            <span>{getActivityTypeIcon(row.type)}</span>
+                            {row.type.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <div className="space-y-1 text-sm">
+                          <div>
+                            <span className="text-gray-500 dark:text-gray-400">User: </span>
+                            {onUserClick ? (
+                              <button
+                                onClick={() => onUserClick(row.username)}
+                                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                              >
+                                {row.username}
+                              </button>
+                            ) : (
+                              <span className="font-medium">{row.username}</span>
+                            )}
+                            {row.department && (
+                              <span className="text-gray-400 dark:text-gray-500">
+                                {' '}
+                                • {row.department}
+                              </span>
+                            )}
+                          </div>
+                          {row.domain && (
+                            <div>
+                              <span className="text-gray-500 dark:text-gray-400">Domain: </span>
+                              <span>{row.domain}</span>
+                            </div>
+                          )}
+                          {row.url && (
+                            <div>
+                              <a
+                                href={row.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 dark:text-blue-400 hover:underline break-all text-xs"
+                              >
+                                {row.url}
+                              </a>
+                            </div>
+                          )}
+                          {row.duration != null && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              Duration: {formatDuration(row.duration)}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                          onClick={() => setOpen(row)}
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              : Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-32 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
+                ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pagination */}
       {data && (
-        <div className="mt-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+        <div className="mt-4 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
           <div>
-            Page {data.page} • {data.items.length} of {data.total}
+            Showing {processedItems.length} of {data.total} activities • Page {data.page}
           </div>
           <div className="flex items-center gap-2">
             <button
-              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+              className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
               disabled={loading || data.page <= 1}
               onClick={() => onPageChange && onPageChange(Math.max(1, data.page - 1))}
             >
-              Prev
+              Previous
             </button>
             <button
-              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+              className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
               disabled={loading || data.page * data.limit >= data.total}
               onClick={() => onPageChange && onPageChange(data.page + 1)}
             >
@@ -136,73 +610,132 @@ export function ActivityLog({ data, loading, error, onRefresh, onPageChange }: P
           </div>
         </div>
       )}
+
+      {/* Details Modal */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setOpen(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onClick={() => setOpen(null)}
+        >
           <div className="absolute inset-0 bg-black/60" />
           <div
-            className="relative max-w-3xl w-[92vw] max-h-[92vh] bg-white dark:bg-gray-900 rounded-xl overflow-hidden shadow-2xl border border-gray-200 dark:border-white/10"
+            className="relative max-w-4xl w-[95vw] max-h-[90vh] bg-white dark:bg-gray-900 rounded-xl overflow-hidden shadow-2xl border border-gray-200 dark:border-white/10 flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-800">
-              <div className="text-sm font-medium">Activity Details</div>
-              <button className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700" onClick={() => setOpen(null)}>Close</button>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-3">
+                <span
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${getActivityTypeColor(
+                    open.type,
+                  )}`}
+                >
+                  <span>{getActivityTypeIcon(open.type)}</span>
+                  {open.type.replace('_', ' ')}
+                </span>
+                <div className="text-sm font-medium">Activity Details</div>
+              </div>
+              <button
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                onClick={() => setOpen(null)}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
             </div>
-            <div className="p-4 text-sm overflow-auto max-h-[80vh] space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+            <div className="p-6 text-sm overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <div className="text-xs uppercase text-gray-500 dark:text-gray-400">Time</div>
-                  <div className="mt-0.5">{new Date(open.time).toLocaleString()}</div>
+                  <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                    Time
+                  </div>
+                  <div className="font-medium">{new Date(open.time).toLocaleString()}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {formatTime(open.time)}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase text-gray-500 dark:text-gray-400">User</div>
-                  <div className="mt-0.5">{open.username}</div>
+                  <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">User</div>
+                  <div className="font-medium">
+                    {onUserClick ? (
+                      <button
+                        onClick={() => {
+                          setOpen(null);
+                          onUserClick(open.username);
+                        }}
+                        className="text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        {open.username}
+                      </button>
+                    ) : (
+                      open.username
+                    )}
+                  </div>
                 </div>
                 {open.department && (
                   <div>
-                    <div className="text-xs uppercase text-gray-500 dark:text-gray-400">Department</div>
-                    <div className="mt-0.5">{open.department}</div>
+                    <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                      Department
+                    </div>
+                    <div>{open.department}</div>
                   </div>
                 )}
                 {open.application && (
                   <div>
-                    <div className="text-xs uppercase text-gray-500 dark:text-gray-400">Application</div>
-                    <div className="mt-0.5">{open.application}</div>
+                    <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                      Application
+                    </div>
+                    <div>{open.application}</div>
                   </div>
                 )}
                 {(open.domain || open.url) && (
                   <div className="sm:col-span-2">
-                    <div className="text-xs uppercase text-gray-500 dark:text-gray-400">Domain / URL</div>
+                    <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                      Domain / URL
+                    </div>
                     {open.url ? (
-                      <a href={open.url} target="_blank" rel="noreferrer" className="mt-0.5 text-blue-600 dark:text-blue-400 break-all underline">
+                      <a
+                        href={open.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-600 dark:text-blue-400 break-all underline"
+                      >
                         {open.url}
                       </a>
                     ) : (
-                      <div className="mt-0.5 break-all">{open.domain}</div>
+                      <div className="break-all">{open.domain}</div>
                     )}
                   </div>
                 )}
-                <div>
-                  <div className="text-xs uppercase text-gray-500 dark:text-gray-400">Activity Type</div>
-                  <div className="mt-0.5">{open.type}</div>
-                </div>
                 {typeof open.duration === 'number' && (
                   <div>
-                    <div className="text-xs uppercase text-gray-500 dark:text-gray-400">Duration</div>
-                    <div className="mt-0.5">{formatDuration(open.duration)}</div>
+                    <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                      Duration
+                    </div>
+                    <div>{formatDuration(open.duration)}</div>
                   </div>
                 )}
               </div>
 
               {open.details && (
                 <div>
-                  <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">Details</div>
-                  <div className="rounded border border-gray-200 dark:border-gray-800 p-3 bg-gray-50 dark:bg-gray-950/50">
+                  <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">
+                    Details
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-950/50">
                     {typeof open.details === 'object' ? (
-                      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                         {Object.entries(open.details as Record<string, unknown>).map(([k, v]) => (
                           <div key={k} className="flex flex-col">
-                            <dt className="text-xs uppercase text-gray-500 dark:text-gray-400">{k}</dt>
-                            <dd className="mt-0.5 break-words">{renderDetailValue(k, v)}</dd>
+                            <dt className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                              {k}
+                            </dt>
+                            <dd className="break-words">{renderDetailValue(k, v)}</dd>
                           </div>
                         ))}
                       </dl>
@@ -216,8 +749,6 @@ export function ActivityLog({ data, loading, error, onRefresh, onPageChange }: P
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }
-
-

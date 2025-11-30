@@ -263,6 +263,11 @@ function App(): JSX.Element {
                 error={activityError}
                 onRefresh={loadActivity}
                 onPageChange={(p) => setActivityPage(p)}
+                onUserClick={(username) => {
+                  setSelectedUser(username);
+                  // Also filter activity by user
+                  setFilters({ ...filters, user: username });
+                }}
               />
             </div>
           </section>

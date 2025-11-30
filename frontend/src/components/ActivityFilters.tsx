@@ -64,36 +64,36 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2">
-        <input className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Search user/domain/reason" value={draft.search || ''} onChange={(e) => setDraft({ ...draft, search: e.target.value })} />
+        <input className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Search user/domain/reason" value={draft.search || ''} onChange={(e) => setDraft({ ...draft, search: e.target.value })} />
         {usersOptions.length ? (
-          <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.user || ''} onChange={(e) => setDraft({ ...draft, user: e.target.value })}>
+          <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.user || ''} onChange={(e) => setDraft({ ...draft, user: e.target.value })}>
             <option value="">All Users</option>
             {usersOptions.map((u) => (
               <option key={u} value={u}>{u}</option>
             ))}
           </select>
         ) : (
-          <input className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Username" value={draft.user || ''} onChange={(e) => setDraft({ ...draft, user: e.target.value })} />
+          <input className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Username" value={draft.user || ''} onChange={(e) => setDraft({ ...draft, user: e.target.value })} />
         )}
-        <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.department || ''} onChange={(e) => setDraft({ ...draft, department: e.target.value })} disabled={loadingDepartments}>
+        <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.department || ''} onChange={(e) => setDraft({ ...draft, department: e.target.value })} disabled={loadingDepartments}>
           <option value="">All Departments</option>
           {departments.map((d) => (
             <option key={d._id} value={d.name}>{d.name}</option>
           ))}
         </select>
-        <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.domain || ''} onChange={(e) => setDraft({ ...draft, domain: e.target.value })} disabled={loadingDomains}>
+        <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.domain || ''} onChange={(e) => setDraft({ ...draft, domain: e.target.value })} disabled={loadingDomains}>
           <option value="">All Domains</option>
           {domains.map((d) => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
-        <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.timeRange || 'all'} onChange={(e) => setDraft({ ...draft, timeRange: e.target.value as any })}>
+        <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.timeRange || 'all'} onChange={(e) => setDraft({ ...draft, timeRange: e.target.value as any })}>
           <option value="all">All Time</option>
           <option value="today">Today</option>
           <option value="week">This Week</option>
           <option value="month">This Month</option>
         </select>
-        <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.type || ''} onChange={(e) => setDraft({ ...draft, type: e.target.value as any })}>
+        <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.type || ''} onChange={(e) => setDraft({ ...draft, type: e.target.value as any })}>
           <option value="">All Types</option>
           <option value="window_activity">window_activity</option>
           <option value="form_interaction">form_interaction</option>
@@ -105,18 +105,18 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
         </select>
       </div>
       <div className="flex items-center gap-2">
-        <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={apply} disabled={loading}>
+        <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={apply} disabled={loading}>
           Apply
         </button>
-        <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onRefresh} disabled={loading}>
+        <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onRefresh} disabled={loading}>
           {loading ? 'Loading…' : 'Refresh'}
         </button>
         <div className="ml-auto flex gap-2">
           {onManageDepartments && (
-            <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onManageDepartments}>Manage Departments</button>
+            <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onManageDepartments}>Manage Departments</button>
           )}
-          <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onExportCSV}>Export CSV</button>
-          <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onExportJSON}>Export JSON</button>
+          <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onExportCSV}>Export CSV</button>
+          <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onExportJSON}>Export JSON</button>
         </div>
       </div>
     </div>

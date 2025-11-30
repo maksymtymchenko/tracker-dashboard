@@ -12,6 +12,24 @@ const CollectSchema = z.object({
   platform: z.string().optional(),
 });
 
+/**
+ * Extract just the filename from a path (handles Windows/Unix paths)
+ */
+function extractFilename(pathOrFilename: string): string {
+  // Handle Windows paths (C:\... or C:/...)
+  const windowsMatch = pathOrFilename.match(/[\/\\]([^\/\\]+\.png)$/i);
+  if (windowsMatch) {
+    return windowsMatch[1];
+  }
+  // Handle Unix paths
+  const unixMatch = pathOrFilename.match(/\/([^\/]+\.png)$/);
+  if (unixMatch) {
+    return unixMatch[1];
+  }
+  // If no path separators, assume it's already just a filename
+  return pathOrFilename;
+}
+
 export async function collectScreenshot(req: Request, res: Response) {
   const parsed = CollectSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
@@ -66,18 +84,27 @@ export async function listScreenshots(req: Request, res: Response) {
 
   const files = await Promise.all(
     items.map(async (s: any) => {
+      // Normalize filename - extract just the filename from any path
+      const normalizedFilename = extractFilename(s.filename || '');
+      
       let url: string;
       try {
         // Generate signed URL for R2 screenshots (valid for 1 hour)
-        url = await r2Storage.getSignedUrl(s.filename);
+        // Try with normalized filename first
+        url = await r2Storage.getSignedUrl(normalizedFilename);
       } catch (error) {
-        console.error(`Failed to get signed URL for ${s.filename}:`, error);
-        // If signed URL generation fails, use stored URL or return error
-        url = s.url || '';
+        // If normalized filename fails, try original filename (for backwards compatibility)
+        try {
+          url = await r2Storage.getSignedUrl(s.filename);
+        } catch (error2) {
+          console.error(`Failed to get signed URL for ${s.filename} (normalized: ${normalizedFilename}):`, error2);
+          // If signed URL generation fails, use stored URL or return error
+          url = s.url || '';
+        }
       }
       
       return {
-        filename: s.filename,
+        filename: normalizedFilename,
         url,
         username: s.username,
         domain: s.domain,
@@ -93,7 +120,13 @@ export async function listScreenshots(req: Request, res: Response) {
 
 export async function deleteScreenshot(req: Request, res: Response) {
   const { filename } = req.params;
-  const shot = await ScreenshotModel.findOneAndDelete({ filename });
+  const normalizedFilename = extractFilename(filename);
+  
+  // Try to find by normalized filename first, then by original filename
+  let shot = await ScreenshotModel.findOneAndDelete({ filename: normalizedFilename });
+  if (!shot) {
+    shot = await ScreenshotModel.findOneAndDelete({ filename });
+  }
   if (!shot) return res.status(404).json({ error: 'not found' });
 
   // Require R2 storage - no filesystem fallback
@@ -101,17 +134,23 @@ export async function deleteScreenshot(req: Request, res: Response) {
     return res.status(500).json({ error: 'R2 storage is not configured. Please set R2 environment variables.' });
   }
 
-  // Delete from R2 bucket
+  // Delete from R2 bucket - try normalized filename first
   try {
-    await r2Storage.deleteFile(filename);
-    console.log(`Successfully deleted screenshot from R2: ${filename}`);
+    await r2Storage.deleteFile(normalizedFilename);
+    console.log(`Successfully deleted screenshot from R2: ${normalizedFilename}`);
   } catch (error) {
-    console.error(`Failed to delete from R2: ${filename}`, error);
-    // Continue even if R2 delete fails (file might already be deleted or not exist)
-    // Database record is already deleted, so we return success
+    // Try original filename if normalized fails
+    try {
+      await r2Storage.deleteFile(filename);
+      console.log(`Successfully deleted screenshot from R2: ${filename}`);
+    } catch (error2) {
+      console.error(`Failed to delete from R2: ${filename} (normalized: ${normalizedFilename})`, error2);
+      // Continue even if R2 delete fails (file might already be deleted or not exist)
+      // Database record is already deleted, so we return success
+    }
   }
 
-  return res.json({ success: true, ok: true, message: 'Screenshot deleted successfully', filename });
+  return res.json({ success: true, ok: true, message: 'Screenshot deleted successfully', filename: normalizedFilename });
 }
 
 export async function bulkDeleteScreenshots(req: Request, res: Response) {
@@ -130,13 +169,22 @@ export async function bulkDeleteScreenshots(req: Request, res: Response) {
   // Delete all files from R2 bucket
   const deleteResults = await Promise.all(
     filenames.map(async (f) => {
+      const normalizedFilename = extractFilename(f);
       try {
-        await r2Storage.deleteFile(f);
-        console.log(`Successfully deleted screenshot from R2: ${f}`);
-        return { filename: f, success: true };
+        // Try normalized filename first
+        await r2Storage.deleteFile(normalizedFilename);
+        console.log(`Successfully deleted screenshot from R2: ${normalizedFilename}`);
+        return { filename: normalizedFilename, success: true };
       } catch (error) {
-        console.error(`Failed to delete from R2: ${f}`, error);
-        return { filename: f, success: false, error };
+        // Try original filename if normalized fails
+        try {
+          await r2Storage.deleteFile(f);
+          console.log(`Successfully deleted screenshot from R2: ${f}`);
+          return { filename: f, success: true };
+        } catch (error2) {
+          console.error(`Failed to delete from R2: ${f} (normalized: ${normalizedFilename})`, error2);
+          return { filename: f, success: false, error: error2 };
+        }
       }
     })
   );

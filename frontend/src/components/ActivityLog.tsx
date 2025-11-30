@@ -28,7 +28,8 @@ export function ActivityLog({
   const [sortField, setSortField] = useState<SortField>('time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [searchQuery, setSearchQuery] = useState('');
-  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const [screenshotOpen, setScreenshotOpen] = useState<string | null>(null);
+  const [screenshotItems, setScreenshotItems] = useState<Array<{ filename: string; url?: string; username: string; domain?: string; mtime?: number }>>([]);
   const [loadingScreenshot, setLoadingScreenshot] = useState(false);
 
   const formatDuration = (ms: number): string => {
@@ -167,19 +168,29 @@ export function ActivityLog({
     return filtered;
   }, [data?.items, searchQuery, sortField, sortDirection]);
 
-  // Keyboard support for closing screenshot lightbox
+  // Keyboard support for screenshot lightbox (same as Screenshots component)
   useEffect(() => {
-    if (!screenshotUrl) return;
+    if (!screenshotOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setScreenshotUrl(null);
+        setScreenshotOpen(null);
+      } else if (e.key === 'ArrowLeft') {
+        const currentIdx = screenshotItems.findIndex((s) => s.filename === screenshotOpen);
+        if (currentIdx > 0) {
+          setScreenshotOpen(screenshotItems[currentIdx - 1].filename);
+        }
+      } else if (e.key === 'ArrowRight') {
+        const currentIdx = screenshotItems.findIndex((s) => s.filename === screenshotOpen);
+        if (currentIdx < screenshotItems.length - 1) {
+          setScreenshotOpen(screenshotItems[currentIdx + 1].filename);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [screenshotUrl]);
+  }, [screenshotOpen, screenshotItems]);
 
   const renderDetailValue = (key: string, value: unknown): JSX.Element => {
     if (key === 'url' && typeof value === 'string') {
@@ -226,6 +237,24 @@ export function ActivityLog({
   };
 
   /**
+   * Extract just the filename from a path (handles Windows/Unix paths)
+   */
+  const extractFilenameFromPath = (pathOrFilename: string): string => {
+    // Handle Windows paths (C:\... or C:/...)
+    const windowsMatch = pathOrFilename.match(/[\/\\]([^\/\\]+\.png)$/i);
+    if (windowsMatch) {
+      return windowsMatch[1];
+    }
+    // Handle Unix paths
+    const unixMatch = pathOrFilename.match(/\/([^\/]+\.png)$/);
+    if (unixMatch) {
+      return unixMatch[1];
+    }
+    // If no path separators, assume it's already just a filename
+    return pathOrFilename;
+  };
+
+  /**
    * Extract screenshot filename or URL from event details
    */
   const getScreenshotInfo = (event: ActivityItem): { filename?: string; url?: string } | null => {
@@ -236,24 +265,43 @@ export function ActivityLog({
       const details = event.details as Record<string, unknown>;
       // Check for common field names
       if (typeof details.filename === 'string') {
-        return { filename: details.filename };
+        // Normalize filename - extract just the filename from any path
+        const normalizedFilename = extractFilenameFromPath(details.filename);
+        return { filename: normalizedFilename };
       }
       if (typeof details.screenshot === 'string') {
-        return { filename: details.screenshot };
+        const normalizedFilename = extractFilenameFromPath(details.screenshot);
+        return { filename: normalizedFilename };
       }
       if (typeof details.url === 'string' && details.url.includes('.png')) {
+        // If URL contains a path, extract filename
+        if (details.url.includes('/') || details.url.includes('\\')) {
+          const normalizedFilename = extractFilenameFromPath(details.url);
+          return { filename: normalizedFilename };
+        }
         return { url: details.url };
       }
       if (typeof details.screenshotUrl === 'string') {
+        // If URL contains a path, extract filename
+        if (details.screenshotUrl.includes('/') || details.screenshotUrl.includes('\\')) {
+          const normalizedFilename = extractFilenameFromPath(details.screenshotUrl);
+          return { filename: normalizedFilename };
+        }
         return { url: details.screenshotUrl };
       }
       // Check nested objects
       if (details.screenshot && typeof details.screenshot === 'object') {
         const screenshot = details.screenshot as Record<string, unknown>;
         if (typeof screenshot.filename === 'string') {
-          return { filename: screenshot.filename };
+          const normalizedFilename = extractFilenameFromPath(screenshot.filename);
+          return { filename: normalizedFilename };
         }
         if (typeof screenshot.url === 'string') {
+          // If URL contains a path, extract filename
+          if (screenshot.url.includes('/') || screenshot.url.includes('\\')) {
+            const normalizedFilename = extractFilenameFromPath(screenshot.url);
+            return { filename: normalizedFilename };
+          }
           return { url: screenshot.url };
         }
       }
@@ -279,8 +327,12 @@ export function ActivityLog({
 
   /**
    * Find screenshot by matching username and time
+   * Returns the screenshot item and all screenshots for navigation
    */
-  const findScreenshotByTime = async (event: ActivityItem): Promise<string | null> => {
+  const findScreenshotByTime = async (event: ActivityItem): Promise<{
+    screenshot: { filename: string; url?: string; username: string; domain?: string; mtime?: number } | null;
+    allScreenshots: Array<{ filename: string; url?: string; username: string; domain?: string; mtime?: number }>;
+  }> => {
     try {
       setLoadingScreenshot(true);
       const eventTime = new Date(event.time).getTime();
@@ -295,11 +347,11 @@ export function ActivityLog({
 
       if (!result.items || result.items.length === 0) {
         console.log('No screenshots found for user:', event.username);
-        return null;
+        return { screenshot: null, allScreenshots: [] };
       }
 
       // Find screenshot closest to event time
-      let closestScreenshot: { url?: string; filename: string; mtime?: number } | null = null;
+      let closestScreenshot: { url?: string; filename: string; username: string; domain?: string; mtime?: number } | null = null;
       let minTimeDiff = Infinity;
 
       for (const screenshot of result.items) {
@@ -350,18 +402,18 @@ export function ActivityLog({
       }
 
       if (closestScreenshot) {
-        const url = closestScreenshot.url || `/screenshots/${closestScreenshot.filename}`;
-        console.log('Found screenshot:', closestScreenshot.filename, 'URL:', url);
-        return url;
+        console.log('Found screenshot:', closestScreenshot.filename);
+        return { screenshot: closestScreenshot, allScreenshots: result.items };
       }
 
       console.log('No matching screenshot found for event:', event);
+      return { screenshot: null, allScreenshots: result.items };
     } catch (error) {
       console.error('Failed to find screenshot:', error);
+      return { screenshot: null, allScreenshots: [] };
     } finally {
       setLoadingScreenshot(false);
     }
-    return null;
   };
 
   /**
@@ -370,20 +422,33 @@ export function ActivityLog({
   const handleViewScreenshot = async (event: ActivityItem) => {
     // First try to get screenshot info from event details
     const screenshotInfo = getScreenshotInfo(event);
-    if (screenshotInfo) {
-      if (screenshotInfo.url) {
-        setScreenshotUrl(screenshotInfo.url);
-        return;
-      } else if (screenshotInfo.filename) {
-        setScreenshotUrl(`/screenshots/${screenshotInfo.filename}`);
-        return;
+    if (screenshotInfo && screenshotInfo.filename) {
+      // If we have a filename, fetch all screenshots for navigation and find this one
+      try {
+        setLoadingScreenshot(true);
+        const result = await fetchScreenshots({
+          user: event.username,
+          limit: 100,
+        });
+        
+        const foundScreenshot = result.items.find(s => s.filename === screenshotInfo.filename);
+        if (foundScreenshot) {
+          setScreenshotItems(result.items);
+          setScreenshotOpen(foundScreenshot.filename);
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to fetch screenshots:', error);
+      } finally {
+        setLoadingScreenshot(false);
       }
     }
 
     // If not found in details, try to find by username and time
-    const foundUrl = await findScreenshotByTime(event);
-    if (foundUrl) {
-      setScreenshotUrl(foundUrl);
+    const { screenshot, allScreenshots } = await findScreenshotByTime(event);
+    if (screenshot) {
+      setScreenshotItems(allScreenshots);
+      setScreenshotOpen(screenshot.filename);
     } else {
       // Show a more helpful error message
       alert(
@@ -971,70 +1036,108 @@ export function ActivityLog({
         </div>
       )}
 
-      {/* Screenshot Lightbox */}
-      {screenshotUrl && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center"
-          onClick={() => setScreenshotUrl(null)}
-        >
-          <div className="absolute inset-0 bg-black/80" />
+      {/* Screenshot Lightbox - Same as Screenshots component */}
+      {screenshotOpen && screenshotItems.length > 0 && (() => {
+        const currentScreenshot = screenshotItems.find((s) => s.filename === screenshotOpen);
+        const currentIndex = screenshotItems.findIndex((s) => s.filename === screenshotOpen);
+        
+        if (!currentScreenshot) return null;
+        
+        return (
           <div
-            className="relative max-w-7xl w-[95vw] h-[95vh] bg-black/90 rounded-xl overflow-hidden shadow-2xl border border-white/10"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            onClick={() => setScreenshotOpen(null)}
           >
-            <img
-              src={screenshotUrl}
-              alt="Screenshot"
-              className="w-full h-full object-contain"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                // Try fallback URL if the primary URL fails
-                if (screenshotUrl.startsWith('/screenshots/')) {
-                  // Already using fallback, show error message
-                  const errorDiv = document.createElement('div');
-                  errorDiv.className = 'absolute inset-0 flex items-center justify-center text-white';
-                  errorDiv.textContent = 'Screenshot not found';
-                  target.parentElement?.appendChild(errorDiv);
-                  target.style.display = 'none';
-                } else if (screenshotUrl.includes('/')) {
-                  // Extract filename and try fallback
-                  const filename = screenshotUrl.split('/').pop();
-                  if (filename) {
-                    target.src = `/screenshots/${filename}`;
+            <div className="absolute inset-0 bg-black/80" />
+            <div
+              className="relative max-w-7xl w-[95vw] h-[95vh] bg-black/90 rounded-xl overflow-hidden shadow-2xl border border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={currentScreenshot.url || `/screenshots/${currentScreenshot.filename}`}
+                alt={currentScreenshot.filename}
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  if (currentScreenshot.url && currentScreenshot.url !== `/screenshots/${currentScreenshot.filename}`) {
+                    target.src = `/screenshots/${currentScreenshot.filename}`;
                   }
-                }
-              }}
-            />
+                }}
+              />
 
-            {/* Info Panel */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
-              <div className="max-w-4xl mx-auto">
-                <div className="text-white mb-2 font-medium">
-                  Screenshot from {open?.username} • {open && formatTime(open.time)}
-                </div>
-                {open?.domain && (
-                  <div className="text-sm text-white/80">
-                    <span className="text-white/60">Domain:</span> {open.domain}
+              {/* Navigation Arrows */}
+              {screenshotItems.length > 1 && (
+                <>
+                  {currentIndex > 0 && (
+                    <button
+                      className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setScreenshotOpen(screenshotItems[currentIndex - 1].filename);
+                      }}
+                    >
+                      ←
+                    </button>
+                  )}
+                  {currentIndex < screenshotItems.length - 1 && (
+                    <button
+                      className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setScreenshotOpen(screenshotItems[currentIndex + 1].filename);
+                      }}
+                    >
+                      →
+                    </button>
+                  )}
+                </>
+              )}
+
+              {/* Info Panel */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6">
+                <div className="max-w-4xl mx-auto">
+                  <div className="text-white mb-2 font-medium">{currentScreenshot.filename}</div>
+                  <div className="flex flex-wrap gap-4 text-sm text-white/80">
+                    <div>
+                      <span className="text-white/60">User:</span> {currentScreenshot.username}
+                    </div>
+                    {currentScreenshot.mtime && (
+                      <div>
+                        <span className="text-white/60">Time:</span> {formatTime(currentScreenshot.mtime)}
+                      </div>
+                    )}
+                    {currentScreenshot.domain && (
+                      <div>
+                        <span className="text-white/60">Domain:</span> {currentScreenshot.domain}
+                      </div>
+                    )}
+                    {screenshotItems.length > 1 && (
+                      <div>
+                        <span className="text-white/60">
+                          {currentIndex + 1} of {screenshotItems.length}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+              </div>
+
+              {/* Top Controls */}
+              <div className="absolute top-4 right-4 flex gap-2">
+                <button
+                  className="px-4 py-2 rounded bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setScreenshotOpen(null);
+                  }}
+                >
+                  Close (Esc)
+                </button>
               </div>
             </div>
-
-            {/* Close Button */}
-            <div className="absolute top-4 right-4 flex gap-2 z-10">
-              <button
-                className="px-4 py-2 rounded bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm text-sm transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setScreenshotUrl(null);
-                }}
-              >
-                Close (Esc)
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

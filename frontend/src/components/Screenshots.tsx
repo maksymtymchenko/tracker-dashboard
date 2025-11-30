@@ -281,13 +281,13 @@ export function Screenshots({
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent flex-1 min-w-[150px]"
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent flex-1 min-w-[150px]"
           />
 
           {/* User Filter */}
           {usersOptions.length > 0 && (
             <select
-              className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent"
+              className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
               value={userFilter}
               onChange={(e) => onUserFilterChange && onUserFilterChange(e.target.value)}
             >
@@ -302,7 +302,7 @@ export function Screenshots({
 
           {/* Sort */}
           <select
-            className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent"
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
           >
@@ -345,7 +345,7 @@ export function Screenshots({
           )}
 
           <button
-            className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700"
+            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700"
             onClick={onRefresh}
             disabled={loading}
           >
@@ -385,7 +385,7 @@ export function Screenshots({
                       checked={selected.has(s.filename)}
                       onChange={() => toggleSelect(s.filename)}
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute top-2 left-2 z-10 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="absolute top-2 left-2 z-10 w-4 h-4 rounded-lg border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   )}
                   <button
@@ -453,7 +453,7 @@ export function Screenshots({
                       type="checkbox"
                       checked={selected.has(s.filename)}
                       onChange={() => toggleSelect(s.filename)}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="w-4 h-4 rounded-lg border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   )}
                   <button
@@ -511,14 +511,14 @@ export function Screenshots({
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading || page <= 1}
             onClick={() => onPageChange && onPageChange(Math.max(1, page - 1))}
           >
             Previous
           </button>
           <button
-            className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading || page * limit >= total}
             onClick={() => onPageChange && onPageChange(page + 1)}
           >
@@ -652,7 +652,7 @@ export function Screenshots({
             </div>
             <div className="flex gap-2 justify-end">
               <button
-                className="text-sm px-4 py-2 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
+                className="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors"
                 onClick={() => setDeleteConfirm(null)}
                 disabled={deleting}
               >
@@ -756,7 +756,7 @@ export function Screenshots({
                           checked={selected.has(s.filename)}
                           onChange={() => toggleSelect(s.filename)}
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute top-2 left-2 z-10 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="absolute top-2 left-2 z-10 w-4 h-4 rounded-lg border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                       )}
                       <button

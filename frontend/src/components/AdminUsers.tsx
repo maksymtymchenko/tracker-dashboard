@@ -51,7 +51,7 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
       <div className="flex items-center justify-between mb-3">
         <div className="font-medium">Manage Users</div>
         <div className="flex items-center gap-2">
-          <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={load} disabled={loading}>
+          <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={load} disabled={loading}>
             {loading ? 'Loading…' : 'Refresh'}
           </button>
         </div>
@@ -75,7 +75,7 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
                 <td className="py-2 px-2">{adminUser?.role ?? '—'}</td>
                 <td className="py-2 px-2 text-right space-x-2">
                   <button
-                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
+                    className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
                     onClick={async () => {
                       if (!confirm(`Delete ALL data for ${uname}? This cannot be undone.`)) return;
                       setLoading(true);
@@ -92,7 +92,7 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
                     Delete Data
                   </button>
                   <button
-                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
+                    className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
                     onClick={async () => {
                       if (!confirm(`Delete user ${uname}?`)) return;
                       if (!adminUser?._id) {
@@ -127,11 +127,11 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
         <div className="flex items-center justify-between p-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-800">
           <div>Page {page}</div>
           <div className="flex items-center gap-2">
-            <button className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+            <button className="px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
               Prev
             </button>
             <button
-              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+              className="px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700"
               onClick={() => {
                 const total = (usernames.length ? usernames : users.map((u) => u.username)).length;
                 const maxPage = Math.max(1, Math.ceil(total / limit));

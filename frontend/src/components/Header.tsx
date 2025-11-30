@@ -20,10 +20,10 @@ export function Header({ username, role, dark, onToggleDark, onLogout }: HeaderP
           {username && <span className="text-xs text-gray-500 dark:text-gray-400">{username}</span>}
         </div>
         <div className="flex items-center gap-3">
-          <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 transition-colors hover:border-gray-400 dark:hover:border-gray-600" onClick={onToggleDark}>
+          <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 transition-colors hover:border-gray-400 dark:hover:border-gray-600" onClick={onToggleDark}>
             {dark ? 'Light' : 'Dark'} Mode
           </button>
-          <button className="text-sm px-3 py-1.5 rounded bg-red-600 text-white shadow-sm hover:shadow transition-all hover:-translate-y-0.5" onClick={onLogout}>
+          <button className="text-sm px-3 py-1.5 rounded-lg bg-red-600 text-white shadow-sm hover:shadow transition-all hover:-translate-y-0.5" onClick={onLogout}>
             Logout
           </button>
         </div>

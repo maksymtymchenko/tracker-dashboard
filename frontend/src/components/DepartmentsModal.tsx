@@ -139,7 +139,7 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
       <div className="relative w-full max-w-5xl max-h-[80vh] overflow-hidden overflow-y-auto bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
           <div className="font-semibold">Manage Departments</div>
-          <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700" onClick={onClose}>Close</button>
+          <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700" onClick={onClose}>Close</button>
         </div>
         <div className="p-4 space-y-6">
           {error && <div className="text-sm text-red-600">{error}</div>}
@@ -147,17 +147,17 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
             <div className="space-y-3">
               <div className="font-medium">Departments</div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
-                <input className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Name" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <input className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Name" value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 <div className="flex items-center gap-2 min-w-0">
-                  <input type="color" className="h-8 w-8 shrink-0 p-0 bg-transparent border border-gray-300 dark:border-gray-700 rounded" value={form.color || '#3b82f6'} onChange={(e) => setForm({ ...form, color: e.target.value })} />
-                  <input className="flex-1 min-w-0 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="#hex color" value={form.color || ''} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+                  <input type="color" className="h-8 w-8 shrink-0 p-0 bg-transparent border border-gray-300 dark:border-gray-700 rounded-lg" value={form.color || '#3b82f6'} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+                  <input className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="#hex color" value={form.color || ''} onChange={(e) => setForm({ ...form, color: e.target.value })} />
                 </div>
-                <input className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Description" value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                <input className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Description" value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
               </div>
               <div className="flex items-center gap-2">
-                <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700" onClick={createOrUpdate} disabled={loading}>{selectedDeptId ? 'Update' : 'Create'}</button>
+                <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700" onClick={createOrUpdate} disabled={loading}>{selectedDeptId ? 'Update' : 'Create'}</button>
                 {selectedDeptId && (
-                  <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700" onClick={() => { setSelectedDeptId(undefined); setForm({ name: '', color: '', description: '' }); }}>Cancel</button>
+                  <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => { setSelectedDeptId(undefined); setForm({ name: '', color: '', description: '' }); }}>Cancel</button>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
@@ -167,12 +167,12 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                   { name: 'Sales', color: '#10b981' },
                   { name: 'Support', color: '#ef4444' },
                 ].map((d) => (
-                  <button key={d.name} className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700" onClick={() => setForm({ ...form, name: d.name, color: d.color })}>
+                  <button key={d.name} className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => setForm({ ...form, name: d.name, color: d.color })}>
                     <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded" style={{ background: d.color }} />{d.name}</span>
                   </button>
                 ))}
                 <button
-                  className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+                  className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700"
                   onClick={async () => {
                     setLoading(true);
                     try {
@@ -211,8 +211,8 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                         <td className="py-2 px-2"><span className="inline-flex items-center gap-2"><span className="w-3 h-3 rounded" style={{ background: d.color || '#9ca3af' }} />{d.color || '—'}</span></td>
                         <td className="py-2 px-2">{d.description || '—'}</td>
                         <td className="py-2 px-2 text-right space-x-2">
-                          <button className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700" onClick={() => edit(d)}>Edit</button>
-                          <button className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700" onClick={() => remove(d._id)}>Delete</button>
+                          <button className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => edit(d)}>Edit</button>
+                          <button className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => remove(d._id)}>Delete</button>
                         </td>
                       </tr>
                     ))}
@@ -224,19 +224,19 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
             <div className="space-y-3">
               <div className="font-medium">User Assignments</div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={assignUser} onChange={(e) => setAssignUser(e.target.value)}>
+                <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={assignUser} onChange={(e) => setAssignUser(e.target.value)}>
                   <option value="">Select User</option>
                   {(usernames.length ? usernames : users.map((u) => u.username)).map((name) => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
-                <select className="px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-transparent" value={assignDept} onChange={(e) => setAssignDept(e.target.value)}>
+                <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={assignDept} onChange={(e) => setAssignDept(e.target.value)}>
                   <option value="">Select Department</option>
                   {departments.map((d) => (
                     <option key={d._id} value={d._id}>{d.name}</option>
                   ))}
                 </select>
-                <button className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-700" onClick={assign} disabled={loading || !assignUser || !assignDept}>Assign</button>
+                <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700" onClick={assign} disabled={loading || !assignUser || !assignDept}>Assign</button>
               </div>
 
               <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
@@ -266,7 +266,7 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                                   <span key={d._id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700">
                                     <span className="w-2 h-2 rounded" style={{ background: d.color || '#9ca3af' }} />
                                     {d.name}
-                                    <button className="ml-1 text-[10px] px-1 rounded border border-gray-300 dark:border-gray-700" onClick={() => unassign(uname, d._id)}>x</button>
+                                    <button className="ml-1 text-[10px] px-1 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => unassign(uname, d._id)}>x</button>
                                   </span>
                                 ))
                               ) : (
@@ -286,14 +286,14 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+                      className="px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700"
                       onClick={() => setUsersPage((p) => Math.max(1, p - 1))}
                       disabled={usersPage <= 1}
                     >
                       Prev
                     </button>
                     <button
-                      className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+                      className="px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700"
                       onClick={() => {
                         const all = usernames.length ? usernames : users.map((u) => u.username);
                         const total = all.length;

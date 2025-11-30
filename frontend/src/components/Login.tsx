@@ -30,13 +30,13 @@ export function Login({ onSubmit }: Props): JSX.Element {
         {error && <div className="text-sm text-red-600">{error}</div>}
         <div className="space-y-1">
           <label className="text-xs text-gray-500">Username</label>
-          <input className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400" value={username} onChange={(e) => setUsername(e.target.value)} />
+          <input className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400" value={username} onChange={(e) => setUsername(e.target.value)} />
         </div>
         <div className="space-y-1">
           <label className="text-xs text-gray-500">Password</label>
-          <input type="password" className="w-full px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input type="password" className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
-        <button disabled={loading} className="w-full px-3 py-2 rounded bg-blue-600 text-white">{loading ? 'Signing in…' : 'Sign in'}</button>
+        <button disabled={loading} className="w-full px-3 py-2 rounded-lg bg-blue-600 text-white">{loading ? 'Signing in…' : 'Sign in'}</button>
       </form>
     </div>
   );

@@ -103,7 +103,7 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
         <div className="font-medium text-base sm:text-lg">Department Analytics</div>
         <div className="flex gap-2">
           <button
-            className={`text-xs sm:text-sm px-3 py-1.5 sm:py-1 rounded border transition-colors touch-manipulation ${
+            className={`text-xs sm:text-sm px-3 py-1.5 sm:py-1 rounded-lg border transition-colors touch-manipulation ${
               viewMode === 'events'
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
                 : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'
@@ -113,7 +113,7 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
             Events
           </button>
           <button
-            className={`text-xs sm:text-sm px-3 py-1.5 sm:py-1 rounded border transition-colors touch-manipulation ${
+            className={`text-xs sm:text-sm px-3 py-1.5 sm:py-1 rounded-lg border transition-colors touch-manipulation ${
               viewMode === 'duration'
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
                 : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'
@@ -123,7 +123,7 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
             Duration
           </button>
           <button
-            className={`text-xs sm:text-sm px-3 py-1.5 sm:py-1 rounded border transition-colors touch-manipulation ${
+            className={`text-xs sm:text-sm px-3 py-1.5 sm:py-1 rounded-lg border transition-colors touch-manipulation ${
               viewMode === 'users'
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
                 : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'

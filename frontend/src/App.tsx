@@ -18,6 +18,7 @@ import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, Top
 function App(): JSX.Element {
   const [dark, setDark] = useState<boolean>(true);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [authChecking, setAuthChecking] = useState<boolean>(true);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | undefined>();
@@ -50,8 +51,15 @@ function App(): JSX.Element {
 
   useEffect(() => {
     (async () => {
-      const s = await authStatus();
-      if (s.authenticated && s.user) setUser(s.user);
+      try {
+        const s = await authStatus();
+        if (s.authenticated && s.user) setUser(s.user);
+      } catch (error) {
+        // If auth check fails, user is not authenticated
+        setUser(null);
+      } finally {
+        setAuthChecking(false);
+      }
     })();
   }, []);
 
@@ -168,6 +176,21 @@ function App(): JSX.Element {
     setUser(null);
   };
 
+  // Show loading state while checking authentication
+  if (authChecking) {
+    return (
+      <div className={dark ? 'dark' : ''}>
+        <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+            <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">Loading...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login form only after confirming user is not authenticated
   if (!user) {
     return (
       <div className={dark ? 'dark' : ''}>

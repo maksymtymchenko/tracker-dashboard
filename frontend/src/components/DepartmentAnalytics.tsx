@@ -12,7 +12,6 @@ interface Props {
 export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }: Props): JSX.Element {
   const [viewMode, setViewMode] = useState<'events' | 'duration' | 'users'>('events');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [pieHoverIndex, setPieHoverIndex] = useState<number | null>(null);
 
@@ -149,7 +148,7 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
               <div className="h-48 sm:h-64 min-w-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ left: 8, right: 8, bottom: 50, top: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <CartesianGrid stroke="#e5e7eb" strokeOpacity={0.3} />
                     <XAxis 
                       dataKey="name" 
                       tick={{ fontSize: 10 }} 
@@ -180,9 +179,6 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
                         if (onDepartmentClick && entry) {
                           const deptData = data.find((d) => d.name === entry.name);
                           if (deptData) {
-                            const index = chartData.findIndex((d) => d.name === entry.name);
-                            setActiveIndex(index);
-                            setTimeout(() => setActiveIndex(null), 300);
                             onDepartmentClick(deptData.id, deptData.name);
                           }
                         }
@@ -191,10 +187,8 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
                     >
                       {chartData.map((entry, index) => {
                         const isHovered = hoverIndex === index;
-                        const isActive = activeIndex === index;
-                        const fillColor = isActive ? '#2563eb' : isHovered ? entry.color : entry.color;
-                        const opacity = isHovered || isActive ? 1 : 0.88;
-                        const scale = isHovered || isActive ? 1.08 : 1;
+                        const fillColor = entry.color;
+                        const opacity = isHovered ? 1 : 0.88;
                         
                         return (
                           <Cell 
@@ -204,9 +198,7 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
                             onMouseEnter={() => setHoverIndex(index)}
                             onMouseLeave={() => setHoverIndex(null)}
                             style={{
-                              transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                              transform: `scaleY(${scale})`,
-                              transformOrigin: 'bottom',
+                              transition: 'opacity 0.2s ease, filter 0.2s ease',
                               cursor: onDepartmentClick ? 'pointer' : 'default',
                               filter: isHovered ? 'brightness(1.08)' : 'none',
                             }}
@@ -296,13 +288,11 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
                 <div
                   key={dept.name}
                   className={`p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 transition-all ${
-                    onDepartmentClick ? 'cursor-pointer hover:shadow-md hover:scale-105' : ''
+                    onDepartmentClick ? 'cursor-pointer hover:shadow-md' : ''
                   }`}
                   style={{ borderLeftColor: dept.color, borderLeftWidth: '4px' }}
                   onClick={() => {
                     if (onDepartmentClick && deptData) {
-                      setActiveIndex(index);
-                      setTimeout(() => setActiveIndex(null), 300);
                       onDepartmentClick(deptData.id, deptData.name);
                     }
                   }}

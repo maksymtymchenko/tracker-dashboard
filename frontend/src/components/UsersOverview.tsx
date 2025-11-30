@@ -34,7 +34,7 @@ export function UsersOverview({ data, loading, error }: Props): JSX.Element {
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ left: 12, right: 12, bottom: 12 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <CartesianGrid stroke="#e5e7eb" strokeOpacity={0.3} />
               <XAxis dataKey="username" tick={{ fontSize: 12 }} interval={0} angle={-30} textAnchor="end" height={50} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip 
@@ -46,7 +46,7 @@ export function UsersOverview({ data, loading, error }: Props): JSX.Element {
                   padding: 0,
                   boxShadow: 'none',
                 }}
-                cursor={{ stroke: '#e5e7eb', strokeWidth: 1, strokeDasharray: '3 3' }}
+                cursor={{ stroke: '#e5e7eb', strokeWidth: 1, strokeOpacity: 0.5 }}
               />
               <Line 
                 type="monotone" 

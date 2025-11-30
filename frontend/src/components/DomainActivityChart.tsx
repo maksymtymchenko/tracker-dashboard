@@ -10,14 +10,10 @@ interface Props {
 }
 
 export function DomainActivityChart({ data, loading, error, onUserClick }: Props): JSX.Element {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  const handleClick = (data: any, index: number) => {
+  const handleClick = (data: any) => {
     if (data && data.username && onUserClick) {
-      setActiveIndex(index);
-      // Reset highlight after animation
-      setTimeout(() => setActiveIndex(null), 300);
       onUserClick(data.username);
     }
   };
@@ -53,7 +49,7 @@ export function DomainActivityChart({ data, loading, error, onUserClick }: Props
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ left: 12, right: 12, bottom: 12 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <CartesianGrid stroke="#e5e7eb" strokeOpacity={0.3} />
               <XAxis dataKey="username" tick={{ fontSize: 12 }} hide={false} interval={0} angle={-30} textAnchor="end" height={50} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip 
@@ -76,10 +72,8 @@ export function DomainActivityChart({ data, loading, error, onUserClick }: Props
               >
                 {data.map((entry, index) => {
                   const isHovered = hoverIndex === index;
-                  const isActive = activeIndex === index;
-                  const fillColor = isActive ? '#2563eb' : isHovered ? '#2563eb' : '#3b82f6';
-                  const opacity = isHovered || isActive ? 1 : 0.85;
-                  const scale = isHovered || isActive ? 1.06 : 1;
+                  const fillColor = isHovered ? '#2563eb' : '#3b82f6';
+                  const opacity = isHovered ? 1 : 0.85;
                   
                   return (
                     <Cell
@@ -89,9 +83,7 @@ export function DomainActivityChart({ data, loading, error, onUserClick }: Props
                       onMouseEnter={() => handleMouseEnter(index)}
                       onMouseLeave={handleMouseLeave}
                       style={{
-                        transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                        transform: `scaleY(${scale})`,
-                        transformOrigin: 'bottom',
+                        transition: 'opacity 0.2s ease, fill 0.2s ease',
                         cursor: onUserClick ? 'pointer' : 'default',
                       }}
                     />

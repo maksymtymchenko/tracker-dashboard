@@ -12,9 +12,14 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { connectToDatabase } from './utils/db.js';
 import { ensureDefaultAdmin } from './utils/auth.js';
 import { r2Storage } from './utils/r2Storage.js';
+import { validateEnvironment } from './utils/envValidation.js';
+import { securityLogger } from './middleware/securityLogger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Validate environment variables before starting
+validateEnvironment();
 
 const app = express();
 
@@ -22,7 +27,7 @@ const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 const allowedOrigins = process.env.CORS_ORIGIN 
   ? process.env.CORS_ORIGIN.split(',')
-  : true; // Allow all origins (safe with proper cookie settings)
+  : (isProduction ? [] : true); // In production, require explicit CORS config
 
 app.use(cors({
   origin: allowedOrigins,
@@ -39,12 +44,24 @@ app.use(helmet({
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
+// Security logging middleware
+app.use(securityLogger);
+
 // Ensure secure cookies work behind a reverse proxy (e.g., Render)
 // Required when using cookie.secure=true so Express trusts X-Forwarded-* headers
 app.set('trust proxy', 1);
 
+// Validate session secret
+const sessionSecret = process.env.SESSION_SECRET;
+if (isProduction && !sessionSecret) {
+  throw new Error('SESSION_SECRET environment variable is required in production');
+}
+if (!sessionSecret || sessionSecret === 'dev_secret_change_me') {
+  console.warn('⚠️  WARNING: Using default or weak session secret. Set SESSION_SECRET in production!');
+}
+
 const sessionOptions: session.SessionOptions = {
-  secret: process.env.SESSION_SECRET || 'dev_secret_change_me',
+  secret: sessionSecret || 'dev_secret_change_me',
   resave: false,
   saveUninitialized: false,
   cookie: {

@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import { UserModel } from '../models/User.js';
 import { verifyPassword } from '../utils/auth.js';
+import { loginRateLimiter, strictRateLimiter } from '../middleware/rateLimiter.js';
+import { logSecurityEvent, SecurityEventType } from '../middleware/securityLogger.js';
 import {
   collectActivity,
   listActivity,
@@ -46,7 +48,7 @@ import { EventModel } from '../models/Event.js';
 const router = Router();
 
 // Authentication
-router.post('/api/login', async (req: Request, res: Response) => {
+router.post('/api/login', loginRateLimiter, async (req: Request, res: Response) => {
   const { username, password } = req.body as {
     username?: string;
     password?: string;
@@ -54,26 +56,57 @@ router.post('/api/login', async (req: Request, res: Response) => {
   if (!username || !password)
     return res.status(400).json({ error: 'username and password required' });
   const user = await UserModel.findOne({ username }).lean();
-  if (!user || !user.password)
+  if (!user || !user.password) {
+    logSecurityEvent(SecurityEventType.LOGIN_FAILURE, {
+      username,
+      reason: 'user_not_found',
+    }, req);
     return res.status(401).json({ error: 'Invalid credentials' });
+  }
   const ok = await verifyPassword(password, user.password);
-  if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
-  const role = user.role === 'ADMIN' ? 'admin' : 'user';
-  req.session.user = { username: user.username, role };
-  await UserModel.updateOne(
-    { _id: user._id },
-    { $set: { lastLogin: new Date() } },
-  );
-  return res.json({
-    ok: true,
-    success: true,
-    user: { username: user.username, role: user.role },
-    userCompat: req.session.user,
+  if (!ok) {
+    logSecurityEvent(SecurityEventType.LOGIN_FAILURE, {
+      username,
+      reason: 'invalid_password',
+    }, req);
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  
+  // Regenerate session ID on successful login to prevent session fixation
+  req.session.regenerate((err) => {
+    if (err) {
+      console.error('Session regeneration error:', err);
+      return res.status(500).json({ error: 'Session error' });
+    }
+    
+    const role = user.role === 'ADMIN' ? 'admin' : 'user';
+    req.session.user = { username: user.username, role };
+    
+    UserModel.updateOne(
+      { _id: user._id },
+      { $set: { lastLogin: new Date() } },
+    ).catch((err) => console.error('Failed to update lastLogin:', err));
+    
+    logSecurityEvent(SecurityEventType.LOGIN_SUCCESS, {
+      username: user.username,
+      role: user.role,
+    }, req);
+    
+    return res.json({
+      ok: true,
+      success: true,
+      user: { username: user.username, role: user.role },
+      userCompat: req.session.user,
+    });
   });
 });
 
 router.post('/api/logout', (req: Request, res: Response) => {
+  const username = req.session.user?.username;
   req.session.destroy(() => {
+    if (username) {
+      logSecurityEvent(SecurityEventType.LOGOUT, { username }, req);
+    }
     res.json({ ok: true, success: true });
   });
 });
@@ -150,13 +183,14 @@ router.get(
   },
 );
 
-router.post('/api/users', requireAdmin, createUser);
+router.post('/api/users', requireAdmin, strictRateLimiter, createUser);
 
-router.delete('/api/users/:id', requireAdmin, deleteUser);
+router.delete('/api/users/:id', requireAdmin, strictRateLimiter, deleteUser);
 
 router.delete(
   '/api/admin/delete-user/:username',
   requireAdmin,
+  strictRateLimiter,
   adminDeleteUserData,
 );
 

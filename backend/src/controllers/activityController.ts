@@ -244,29 +244,51 @@ export async function analyticsSummary(_req: Request, res: Response) {
   const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
   const thisMonth = new Date(today.getFullYear(), now.getMonth(), 1);
 
-  const [totalAgg, todayAgg, weekAgg, monthAgg] = await Promise.all([
-    EventModel.aggregate([
-      {
-        $group: {
-          _id: null,
-          events: { $sum: 1 },
-          duration: { $sum: { $ifNull: ['$durationMs', 0] } },
-          users: { $addToSet: '$username' },
-          domains: { $addToSet: '$domain' },
-        },
+  // Use $facet to run all aggregations in parallel within a single query
+  const [result] = await EventModel.aggregate([
+    {
+      $facet: {
+        total: [
+          {
+            $group: {
+              _id: null,
+              events: { $sum: 1 },
+              duration: { $sum: { $ifNull: ['$durationMs', 0] } },
+              users: { $addToSet: '$username' },
+              domains: { $addToSet: '$domain' },
+            },
+          },
+          { $project: { _id: 0, events: 1, duration: 1, users: { $size: '$users' }, domains: { $size: '$domains' } } },
+        ],
+        today: [
+          { $match: { timestamp: { $gte: today } } },
+          { $group: { _id: null, events: { $sum: 1 }, duration: { $sum: { $ifNull: ['$durationMs', 0] } } } },
+          { $project: { _id: 0, events: 1, duration: 1 } },
+        ],
+        week: [
+          { $match: { timestamp: { $gte: thisWeek } } },
+          { $group: { _id: null, events: { $sum: 1 }, duration: { $sum: { $ifNull: ['$durationMs', 0] } } } },
+          { $project: { _id: 0, events: 1, duration: 1 } },
+        ],
+        month: [
+          { $match: { timestamp: { $gte: thisMonth } } },
+          { $group: { _id: null, events: { $sum: 1 }, duration: { $sum: { $ifNull: ['$durationMs', 0] } } } },
+          { $project: { _id: 0, events: 1, duration: 1 } },
+        ],
       },
-      { $project: { _id: 0, events: 1, duration: 1, users: { $size: '$users' }, domains: { $size: '$domains' } } },
-    ]),
-    EventModel.aggregate([{ $match: { timestamp: { $gte: today } } }, { $group: { _id: null, events: { $sum: 1 }, duration: { $sum: { $ifNull: ['$durationMs', 0] } } } }, { $project: { _id: 0, events: 1, duration: 1 } }]),
-    EventModel.aggregate([{ $match: { timestamp: { $gte: thisWeek } } }, { $group: { _id: null, events: { $sum: 1 }, duration: { $sum: { $ifNull: ['$durationMs', 0] } } } }, { $project: { _id: 0, events: 1, duration: 1 } }]),
-    EventModel.aggregate([{ $match: { timestamp: { $gte: thisMonth } } }, { $group: { _id: null, events: { $sum: 1 }, duration: { $sum: { $ifNull: ['$durationMs', 0] } } } }, { $project: { _id: 0, events: 1, duration: 1 } }]),
+    },
   ]);
-  const total = totalAgg[0] || { events: 0, users: 0, domains: 0, duration: 0 };
-  const todayS = todayAgg[0] || { events: 0, duration: 0 };
-  const weekS = weekAgg[0] || { events: 0, duration: 0 };
-  const monthS = monthAgg[0] || { events: 0, duration: 0 };
-  const registeredUsers = await UserModel.countDocuments();
-  const screenshots = await ScreenshotModel.estimatedDocumentCount();
+
+  const total = result.total[0] || { events: 0, users: 0, domains: 0, duration: 0 };
+  const todayS = result.today[0] || { events: 0, duration: 0 };
+  const weekS = result.week[0] || { events: 0, duration: 0 };
+  const monthS = result.month[0] || { events: 0, duration: 0 };
+
+  // Run user and screenshot counts in parallel
+  const [registeredUsers, screenshots] = await Promise.all([
+    UserModel.countDocuments(),
+    ScreenshotModel.estimatedDocumentCount(),
+  ]);
   // include legacy-compatible totals with screenshots for UI
   const totals = { events: total.events || 0, users: total.users || 0, domains: total.domains || 0, screenshots };
   return res.json({ total, totals, today: todayS, thisWeek: weekS, thisMonth: monthS, registeredUsers });

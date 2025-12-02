@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Header } from 'src/components/Header';
 import { KpiCards } from 'src/components/KpiCards';
 import { ActivityLog } from 'src/components/ActivityLog';
@@ -62,7 +62,7 @@ function App(): JSX.Element {
     })();
   }, []);
 
-  const loadSummary = async () => {
+  const loadSummary = useCallback(async () => {
     setSummaryError(undefined);
     setSummaryLoading(true);
     try {
@@ -72,9 +72,9 @@ function App(): JSX.Element {
     } finally {
       setSummaryLoading(false);
     }
-  };
+  }, []);
 
-  const loadActivity = async () => {
+  const loadActivity = useCallback(async () => {
     setActivityError(undefined);
     setActivityLoading(true);
     try {
@@ -94,9 +94,9 @@ function App(): JSX.Element {
     } finally {
       setActivityLoading(false);
     }
-  };
+  }, [activityPage, activityLimit, filters]);
 
-  const loadScreenshots = async () => {
+  const loadScreenshots = useCallback(async () => {
     setShotsError(undefined);
     setShotsLoading(true);
     try {
@@ -108,7 +108,7 @@ function App(): JSX.Element {
     } finally {
       setShotsLoading(false);
     }
-  };
+  }, [shotsPage, shotsLimit, shotsUser]);
 
   // Reset activity page to 1 when filters change
   useEffect(() => {
@@ -117,11 +117,10 @@ function App(): JSX.Element {
     }
   }, [user, filters.search, filters.user, filters.department, filters.domain, filters.timeRange, filters.type]);
 
+  // Load initial data when user logs in
   useEffect(() => {
     if (!user) return;
     loadSummary();
-    loadActivity();
-    loadScreenshots();
     (async () => {
       try {
         setUsersOptions(await listDistinctUsers());
@@ -171,7 +170,19 @@ function App(): JSX.Element {
         setDeptAnalyticsLoading(false);
       }
     })();
-  }, [user, filters, activityPage, shotsPage, shotsUser]);
+  }, [user, loadSummary]);
+
+  // Load activity when filters or page changes
+  useEffect(() => {
+    if (!user) return;
+    loadActivity();
+  }, [user, loadActivity]);
+
+  // Load screenshots when page or user filter changes
+  useEffect(() => {
+    if (!user) return;
+    loadScreenshots();
+  }, [user, loadScreenshots]);
 
   const handleLogin = async (u: string, p: string) => {
     const logged = await apiLogin(u, p);

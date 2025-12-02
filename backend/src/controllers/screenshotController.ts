@@ -82,7 +82,8 @@ export async function listScreenshots(req: Request, res: Response) {
     return res.status(500).json({ error: 'R2 storage is not configured. Please set R2 environment variables.' });
   }
 
-  const files = await Promise.all(
+  // Use Promise.allSettled for better error handling and parallel processing
+  const files = await Promise.allSettled(
     items.map(async (s: any) => {
       // Normalize filename - extract just the filename from any path
       const normalizedFilename = extractFilename(s.filename || '');
@@ -114,8 +115,26 @@ export async function listScreenshots(req: Request, res: Response) {
     })
   );
 
+  // Extract successful results, fallback to stored URL for failed ones
+  const processedFiles = files.map((result, index) => {
+    if (result.status === 'fulfilled') {
+      return result.value;
+    }
+    // Fallback for failed URL generation
+    const s = items[index];
+    const normalizedFilename = extractFilename(s.filename || '');
+    return {
+      filename: normalizedFilename,
+      url: s.url || '',
+      username: s.username,
+      domain: s.domain,
+      deviceId: s.deviceId,
+      mtime: (s.mtime as any)?.valueOf?.() || new Date(s.mtime as any).getTime(),
+    };
+  });
+
   // Return processed items with signed URLs in the items array for frontend compatibility
-  return res.json({ items: files, total, page, limit, count: total, files });
+  return res.json({ items: processedFiles, total, page, limit, count: total, files: processedFiles });
 }
 
 export async function deleteScreenshot(req: Request, res: Response) {

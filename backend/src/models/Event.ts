@@ -17,6 +17,9 @@ const EventSchema = new Schema(
 EventSchema.index({ timestamp: -1 });
 EventSchema.index({ username: 1, timestamp: -1 });
 EventSchema.index({ domain: 1, timestamp: -1 });
+EventSchema.index({ type: 1, timestamp: -1 });
+EventSchema.index({ username: 1, domain: 1, timestamp: -1 });
+EventSchema.index({ username: 1, type: 1, timestamp: -1 });
 
 export type Event = InferSchemaType<typeof EventSchema>;
 export const EventModel = model('Event', EventSchema);

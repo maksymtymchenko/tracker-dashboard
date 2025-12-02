@@ -28,7 +28,7 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
   const [domains, setDomains] = useState<string[]>([]);
   const [loadingDomains, setLoadingDomains] = useState(false);
   const [searchInput, setSearchInput] = useState<string>(value.search || '');
-  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync searchInput with value.search when it changes externally
   useEffect(() => {

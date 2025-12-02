@@ -25,11 +25,11 @@ const app = express();
 
 // Configure CORS before Helmet to ensure headers are set correctly
 const isProduction = process.env.NODE_ENV === 'production';
-const allowedOrigins = process.env.CORS_ORIGIN 
+const allowedOrigins: string[] | true = process.env.CORS_ORIGIN 
   ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
   : (isProduction ? [] : true); // In production, require explicit CORS config
 
-if (isProduction && allowedOrigins.length === 0) {
+if (isProduction && Array.isArray(allowedOrigins) && allowedOrigins.length === 0) {
   console.error('❌ CORS_ORIGIN is not configured. CORS requests will be blocked!');
 }
 

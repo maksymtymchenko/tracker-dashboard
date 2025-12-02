@@ -460,6 +460,17 @@ export function ActivityLog({
   };
 
   /**
+   * Handle clicking View button - opens screenshot if type is screenshot, otherwise opens details modal
+   */
+  const handleViewClick = async (row: ActivityItem) => {
+    if (row.type === 'screenshot') {
+      await handleViewScreenshot(row);
+    } else {
+      setOpen(row);
+    }
+  };
+
+  /**
    * Handle viewing screenshot for a screenshot event
    */
   const handleViewScreenshot = async (event: ActivityItem) => {
@@ -694,9 +705,10 @@ export function ActivityLog({
                       <td className="py-3 px-4">
                         <button
                           className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-                          onClick={() => setOpen(row)}
+                          onClick={() => handleViewClick(row)}
+                          disabled={row.type === 'screenshot' && loadingScreenshot}
                         >
-                          View
+                          {row.type === 'screenshot' && loadingScreenshot ? 'Loading…' : 'View'}
                         </button>
                       </td>
                     </tr>
@@ -783,9 +795,10 @@ export function ActivityLog({
                   </div>
                   <button
                     className="mt-3 w-full text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-                    onClick={() => setOpen(row)}
+                    onClick={() => handleViewClick(row)}
+                    disabled={row.type === 'screenshot' && loadingScreenshot}
                   >
-                    View Details
+                    {row.type === 'screenshot' && loadingScreenshot ? 'Loading…' : row.type === 'screenshot' ? 'View Screenshot' : 'View Details'}
                   </button>
                 </div>
               ))
@@ -869,9 +882,10 @@ export function ActivityLog({
                         </div>
                         <button
                           className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-                          onClick={() => setOpen(row)}
+                          onClick={() => handleViewClick(row)}
+                          disabled={row.type === 'screenshot' && loadingScreenshot}
                         >
-                          View Details
+                          {row.type === 'screenshot' && loadingScreenshot ? 'Loading…' : row.type === 'screenshot' ? 'View Screenshot' : 'View Details'}
                         </button>
                       </div>
                     </div>

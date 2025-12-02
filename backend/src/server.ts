@@ -26,11 +26,37 @@ const app = express();
 // Configure CORS before Helmet to ensure headers are set correctly
 const isProduction = process.env.NODE_ENV === 'production';
 const allowedOrigins = process.env.CORS_ORIGIN 
-  ? process.env.CORS_ORIGIN.split(',')
+  ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
   : (isProduction ? [] : true); // In production, require explicit CORS config
 
+if (isProduction && allowedOrigins.length === 0) {
+  console.error('❌ CORS_ORIGIN is not configured. CORS requests will be blocked!');
+}
+
 app.use(cors({
-  origin: allowedOrigins,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (isProduction) {
+      // In production, only allow configured origins
+      if (Array.isArray(allowedOrigins) && allowedOrigins.length > 0) {
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        console.warn(`⚠️  CORS: Blocked request from origin: ${origin}`);
+        return callback(new Error('Not allowed by CORS'));
+      }
+      // This shouldn't happen if validation passed, but handle it anyway
+      console.error('❌ CORS_ORIGIN not configured in production!');
+      return callback(new Error('CORS not configured'));
+    }
+    
+    // In development, allow all origins
+    return callback(null, true);
+  },
   credentials: true,
   optionsSuccessStatus: 200,
 }));

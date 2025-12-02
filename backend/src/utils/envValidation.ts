@@ -32,9 +32,14 @@ export function validateEnvironment(): void {
     }
   }
 
-  // Warn about CORS configuration in production
+  // Require CORS configuration in production
   if (isProduction && !process.env.CORS_ORIGIN) {
-    console.warn('⚠️  WARNING: CORS_ORIGIN is not set in production. This may cause CORS issues.');
+    errors.push(
+      'CORS_ORIGIN is required in production. Please set it in your environment variables.\n' +
+        '   For Render: Go to your service settings > Environment > Add CORS_ORIGIN\n' +
+        '   Value should be your frontend URL, e.g.: https://tracker-dashboard-1-msnd.onrender.com\n' +
+        '   For multiple origins, separate with commas: https://app1.com,https://app2.com',
+    );
   }
 
   if (errors.length > 0) {

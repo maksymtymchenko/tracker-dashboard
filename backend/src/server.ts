@@ -51,17 +51,12 @@ app.use(securityLogger);
 // Required when using cookie.secure=true so Express trusts X-Forwarded-* headers
 app.set('trust proxy', 1);
 
-// Validate session secret
-const sessionSecret = process.env.SESSION_SECRET;
-if (isProduction && !sessionSecret) {
-  throw new Error('SESSION_SECRET environment variable is required in production');
-}
-if (!sessionSecret || sessionSecret === 'dev_secret_change_me') {
-  console.warn('⚠️  WARNING: Using default or weak session secret. Set SESSION_SECRET in production!');
-}
+// Session secret is validated in validateEnvironment()
+// Use the value or fallback to default (only for development)
+const sessionSecret = process.env.SESSION_SECRET || 'dev_secret_change_me';
 
 const sessionOptions: session.SessionOptions = {
-  secret: sessionSecret || 'dev_secret_change_me',
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {

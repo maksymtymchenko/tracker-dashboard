@@ -7,6 +7,7 @@ const ScreenshotSchema = new Schema(
     mtime: { type: Date },
     domain: { type: String },
     username: { type: String },
+    deviceId: { type: String },
   },
   { versionKey: false },
 );

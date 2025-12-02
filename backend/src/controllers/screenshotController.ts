@@ -59,7 +59,7 @@ export async function collectScreenshot(req: Request, res: Response) {
     return res.status(500).json({ error: 'Failed to save screenshot to R2 storage' });
   }
 
-  await ScreenshotModel.create({ filename, url, mtime: new Date(), domain, username: username || 'unknown' });
+  await ScreenshotModel.create({ filename, url, mtime: new Date(), domain, username: username || 'unknown', deviceId });
 
   return res.json({ saved: filename, ok: true });
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import { DepartmentAnalytics as DepartmentAnalyticsType } from 'src/types';
 
@@ -14,6 +14,11 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [pieHoverIndex, setPieHoverIndex] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAllCards, setShowAllCards] = useState(false);
+  const [maxChartItems] = useState(15); // Limit departments shown in charts
+  const [cardsPerPage] = useState(12); // Number of cards to show initially
+  const [cardViewMode, setCardViewMode] = useState<'cards' | 'list'>('cards');
 
   useEffect(() => {
     const handleResize = () => {
@@ -43,30 +48,65 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
     return `${days}d ${remHours}h`;
   };
 
-  // Prepare chart data
-  const chartData = data.map((dept) => ({
-    name: dept.name,
-    events: dept.events,
-    duration: dept.durationHours,
-    durationMs: dept.duration,
-    users: dept.userCount,
-    color: dept.color || '#3b82f6',
-    uniqueDomains: dept.uniqueDomains,
-    averageDuration: dept.averageDuration,
-  }));
+  // Filter and sort data based on search and view mode
+  const filteredData = useMemo(() => {
+    let filtered = [...data];
+    
+    // Apply search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((dept) => 
+        dept.name.toLowerCase().includes(query)
+      );
+    }
+    
+    // Sort by current view mode
+    filtered.sort((a, b) => {
+      if (viewMode === 'events') return b.events - a.events;
+      if (viewMode === 'duration') return b.durationHours - a.durationHours;
+      return b.userCount - a.userCount;
+    });
+    
+    return filtered;
+  }, [data, searchQuery, viewMode]);
 
-  // Calculate totals for pie chart
-  const totalEvents = data.reduce((sum, dept) => sum + dept.events, 0);
-  const totalDuration = data.reduce((sum, dept) => sum + dept.duration, 0);
-  const pieData = data.map((dept) => ({
-    name: dept.name,
-    value: viewMode === 'events' 
-      ? dept.events 
-      : viewMode === 'duration' 
-        ? dept.durationHours 
-        : dept.userCount,
-    color: dept.color || '#3b82f6',
-  })).filter((item) => item.value > 0);
+  // Prepare chart data (limit to top N for better visualization)
+  const chartData = useMemo(() => {
+    return filteredData.slice(0, maxChartItems).map((dept) => ({
+      name: dept.name,
+      events: dept.events,
+      duration: dept.durationHours,
+      durationMs: dept.duration,
+      users: dept.userCount,
+      color: dept.color || '#3b82f6',
+      uniqueDomains: dept.uniqueDomains,
+      averageDuration: dept.averageDuration,
+      id: dept.id,
+    }));
+  }, [filteredData, maxChartItems]);
+
+  // Calculate totals for pie chart (use filtered data)
+  const totalEvents = filteredData.reduce((sum, dept) => sum + dept.events, 0);
+  const totalDuration = filteredData.reduce((sum, dept) => sum + dept.duration, 0);
+  const pieData = useMemo(() => {
+    return filteredData.slice(0, maxChartItems).map((dept) => ({
+      name: dept.name,
+      value: viewMode === 'events' 
+        ? dept.events 
+        : viewMode === 'duration' 
+          ? dept.durationHours 
+          : dept.userCount,
+      color: dept.color || '#3b82f6',
+    })).filter((item) => item.value > 0);
+  }, [filteredData, viewMode, maxChartItems]);
+  
+  // Prepare cards data (with pagination)
+  const displayedCards = useMemo(() => {
+    if (showAllCards) return filteredData;
+    return filteredData.slice(0, cardsPerPage);
+  }, [filteredData, showAllCards, cardsPerPage]);
+  
+  const hasMoreCards = filteredData.length > cardsPerPage;
 
   const getYAxisLabel = () => {
     if (viewMode === 'events') return 'Events';
@@ -100,8 +140,24 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
   return (
     <div className="p-3 sm:p-4 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <div className="font-medium text-base sm:text-lg">Department Analytics</div>
-        <div className="flex gap-2">
+        <div className="font-medium text-base sm:text-lg">
+          Department Analytics
+          {filteredData.length !== data.length && (
+            <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
+              ({filteredData.length} of {data.length})
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Search */}
+          <input
+            type="text"
+            placeholder="Search departments..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent min-w-[150px] flex-1 sm:flex-initial"
+          />
+          <div className="flex gap-2">
           <button
             className={`text-xs sm:text-sm px-3 py-1.5 sm:py-1 rounded-lg border transition-colors touch-manipulation ${
               viewMode === 'events'
@@ -132,6 +188,7 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
           >
             Users
           </button>
+          </div>
         </div>
       </div>
       
@@ -139,8 +196,10 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
       
       {loading ? (
         <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400">Loading…</div>
-      ) : data.length === 0 ? (
-        <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400">No department data available</div>
+      ) : filteredData.length === 0 ? (
+        <div className="h-48 sm:h-64 flex items-center justify-center text-gray-400">
+          {searchQuery ? 'No departments found matching your search' : 'No department data available'}
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
@@ -152,9 +211,9 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
                     <XAxis 
                       dataKey="name" 
                       tick={{ fontSize: 10 }} 
-                      angle={-45} 
-                      textAnchor="end" 
-                      height={60}
+                      angle={chartData.length > 8 ? -45 : 0} 
+                      textAnchor={chartData.length > 8 ? "end" : "middle"} 
+                      height={chartData.length > 8 ? 60 : 30}
                       interval={0}
                     />
                     <YAxis 
@@ -176,11 +235,8 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
                       dataKey={getBarDataKey()} 
                       radius={4}
                       onClick={(entry: any) => {
-                        if (onDepartmentClick && entry) {
-                          const deptData = data.find((d) => d.name === entry.name);
-                          if (deptData) {
-                            onDepartmentClick(deptData.id, deptData.name);
-                          }
+                        if (onDepartmentClick && entry && entry.id) {
+                          onDepartmentClick(entry.id, entry.name);
                         }
                       }}
                       style={{ cursor: onDepartmentClick ? 'pointer' : 'default' }}
@@ -281,46 +337,155 @@ export function DepartmentAnalytics({ data, loading, error, onDepartmentClick }:
           </div>
 
           {/* Department Stats Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
-            {chartData.map((dept, index) => {
-              const deptData = data.find((d) => d.name === dept.name);
-              return (
-                <div
-                  key={dept.name}
-                  className={`p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 transition-all ${
-                    onDepartmentClick ? 'cursor-pointer hover:shadow-md' : ''
+          <div className="mt-4">
+            {/* View Mode Toggle */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Departments ({displayedCards.length})
+              </div>
+              <div className="flex rounded border border-gray-300 dark:border-gray-700 overflow-hidden">
+                <button
+                  className={`px-3 py-1.5 text-sm transition-colors ${
+                    cardViewMode === 'cards'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800'
                   }`}
-                  style={{ borderLeftColor: dept.color, borderLeftWidth: '4px' }}
-                  onClick={() => {
-                    if (onDepartmentClick && deptData) {
-                      onDepartmentClick(deptData.id, deptData.name);
-                    }
-                  }}
+                  onClick={() => setCardViewMode('cards')}
+                  title="Cards view"
                 >
-                  <div className="font-medium mb-2 text-sm sm:text-base" style={{ color: dept.color }}>
-                    {dept.name}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
-                    <div>
-                      <div className="text-gray-500 dark:text-gray-400 text-xs">Events</div>
-                      <div className="font-semibold text-sm sm:text-base">{dept.events.toLocaleString()}</div>
+                  ⊞ Cards
+                </button>
+                <button
+                  className={`px-3 py-1.5 text-sm transition-colors ${
+                    cardViewMode === 'list'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                  onClick={() => setCardViewMode('list')}
+                  title="List view"
+                >
+                  ☰ List
+                </button>
+              </div>
+            </div>
+
+            {/* Cards View */}
+            {cardViewMode === 'cards' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {displayedCards.map((dept) => {
+                  const deptColor = dept.color || '#3b82f6';
+                  return (
+                    <div
+                      key={dept.id}
+                      className={`p-2.5 sm:p-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 transition-all ${
+                        onDepartmentClick ? 'cursor-pointer hover:shadow-md' : ''
+                      }`}
+                      style={{ borderLeftColor: deptColor, borderLeftWidth: '4px' }}
+                      onClick={() => {
+                        if (onDepartmentClick) {
+                          onDepartmentClick(dept.id, dept.name);
+                        }
+                      }}
+                    >
+                      <div className="font-medium mb-1.5 text-sm" style={{ color: deptColor }}>
+                        {dept.name}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <div className="text-gray-500 dark:text-gray-400 text-xs">Events</div>
+                          <div className="font-semibold text-sm">{dept.events.toLocaleString()}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500 dark:text-gray-400 text-xs">Duration</div>
+                          <div className="font-semibold text-sm">{formatHours(dept.durationHours)}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500 dark:text-gray-400 text-xs">Users</div>
+                          <div className="font-semibold text-sm">{dept.userCount}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500 dark:text-gray-400 text-xs">Domains</div>
+                          <div className="font-semibold text-sm">{dept.uniqueDomains}</div>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-gray-500 dark:text-gray-400 text-xs">Duration</div>
-                      <div className="font-semibold text-sm sm:text-base">{formatHours(dept.duration)}</div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* List View */}
+            {cardViewMode === 'list' && (
+              <div className="space-y-2">
+                {displayedCards.map((dept) => {
+                  const deptColor = dept.color || '#3b82f6';
+                  return (
+                    <div
+                      key={dept.id}
+                      className={`flex items-center gap-4 p-2.5 sm:p-3 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors group ${
+                        onDepartmentClick ? 'cursor-pointer' : ''
+                      }`}
+                      style={{ borderLeftColor: deptColor, borderLeftWidth: '4px' }}
+                      onClick={() => {
+                        if (onDepartmentClick) {
+                          onDepartmentClick(dept.id, dept.name);
+                        }
+                      }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm mb-1" style={{ color: deptColor }}>
+                          {dept.name}
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <div className="text-gray-500 dark:text-gray-400 text-xs">Events</div>
+                            <div className="font-semibold text-sm">{dept.events.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500 dark:text-gray-400 text-xs">Duration</div>
+                            <div className="font-semibold text-sm">{formatHours(dept.durationHours)}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500 dark:text-gray-400 text-xs">Users</div>
+                            <div className="font-semibold text-sm">{dept.userCount}</div>
+                          </div>
+                          <div>
+                            <div className="text-gray-500 dark:text-gray-400 text-xs">Domains</div>
+                            <div className="font-semibold text-sm">{dept.uniqueDomains}</div>
+                          </div>
+                        </div>
+                        {dept.averageDuration > 0 && (
+                          <div className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                            Avg Duration: {formatDuration(dept.averageDuration)}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-gray-500 dark:text-gray-400 text-xs">Users</div>
-                      <div className="font-semibold text-sm sm:text-base">{dept.users}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500 dark:text-gray-400 text-xs">Domains</div>
-                      <div className="font-semibold text-sm sm:text-base">{dept.uniqueDomains}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
+            
+            {/* Show More/Less Button */}
+            {hasMoreCards && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  onClick={() => setShowAllCards(!showAllCards)}
+                  className="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                >
+                  {showAllCards 
+                    ? `Show Less (${cardsPerPage} of ${filteredData.length})` 
+                    : `Show More (${filteredData.length - cardsPerPage} more)`}
+                </button>
+              </div>
+            )}
+            
+            {/* Chart limit notice */}
+            {filteredData.length > maxChartItems && (
+              <div className="mt-3 text-xs text-gray-500 dark:text-gray-400 text-center">
+                Showing top {maxChartItems} departments in charts (out of {filteredData.length} total)
+              </div>
+            )}
           </div>
         </>
       )}

@@ -5,7 +5,6 @@ import { ActivityLog } from 'src/components/ActivityLog';
 import { Screenshots } from 'src/components/Screenshots';
 import { Login } from 'src/components/Login';
 import { DomainActivityChart } from 'src/components/DomainActivityChart';
-import { UsersOverview } from 'src/components/UsersOverview';
 import { ActivityFilters, ActivityFilterState } from 'src/components/ActivityFilters';
 import { AdminUsers } from 'src/components/AdminUsers';
 import { DepartmentsModal } from 'src/components/DepartmentsModal';
@@ -237,18 +236,13 @@ function App(): JSX.Element {
             </section>
           )}
 
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2">
-              <DomainActivityChart 
-                data={usersAgg} 
-                loading={usersAggLoading} 
-                error={usersAggError}
-                onUserClick={(username) => setSelectedUser(username)}
-              />
-            </div>
-            <div>
-              <UsersOverview data={usersAgg} loading={usersAggLoading} error={usersAggError} />
-            </div>
+          <section>
+            <DomainActivityChart 
+              data={usersAgg} 
+              loading={usersAggLoading} 
+              error={usersAggError}
+              onUserClick={(username) => setSelectedUser(username)}
+            />
           </section>
 
           <section className="p-4 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800">

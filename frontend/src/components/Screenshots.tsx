@@ -18,6 +18,7 @@ interface Props {
   userFilter?: string;
   onUserFilterChange?(username: string): void;
   userRole?: 'admin' | 'user';
+  searchQuery?: string;
 }
 
 export function Screenshots({
@@ -33,6 +34,7 @@ export function Screenshots({
   userFilter = '',
   onUserFilterChange,
   userRole,
+  searchQuery: externalSearchQuery,
 }: Props): JSX.Element {
   const [open, setOpen] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -40,7 +42,12 @@ export function Screenshots({
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState('');
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  
+  // Use external search query if provided, otherwise use local one
+  const searchQuery = externalSearchQuery !== undefined 
+    ? (externalSearchQuery || '') 
+    : localSearchQuery;
   const [showFilters, setShowFilters] = useState(false);
   const [showViewAll, setShowViewAll] = useState(false);
   const [allScreenshots, setAllScreenshots] = useState<ScreenshotItem[]>([]);
@@ -275,14 +282,16 @@ export function Screenshots({
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Search */}
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent flex-1 min-w-[150px]"
-          />
+          {/* Search - only show if no external search is provided */}
+          {externalSearchQuery === undefined && (
+            <input
+              type="text"
+              placeholder="Search..."
+              value={localSearchQuery}
+              onChange={(e) => setLocalSearchQuery(e.target.value)}
+              className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent flex-1 min-w-[150px]"
+            />
+          )}
 
           {/* User Filter */}
           {usersOptions.length > 0 && (
@@ -699,13 +708,15 @@ export function Screenshots({
 
             {/* Modal Filters */}
             <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex flex-wrap items-center gap-2">
-              <input
-                type="text"
-                placeholder="Search screenshots..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent flex-1 min-w-[200px]"
-              />
+              {externalSearchQuery === undefined && (
+                <input
+                  type="text"
+                  placeholder="Search screenshots..."
+                  value={localSearchQuery}
+                  onChange={(e) => setLocalSearchQuery(e.target.value)}
+                  className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent flex-1 min-w-[200px]"
+                />
+              )}
               <select
                 className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
                 value={sortBy}

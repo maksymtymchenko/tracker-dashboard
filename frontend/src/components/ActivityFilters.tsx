@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { listDepartments, listDistinctDomains } from 'src/api/client';
 import { Department } from 'src/types';
 
@@ -23,11 +23,17 @@ interface Props {
 }
 
 export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, onRefresh, loading, onManageDepartments, usersOptions = [] }: Props): JSX.Element {
-  const [draft, setDraft] = useState<ActivityFilterState>(value);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
   const [domains, setDomains] = useState<string[]>([]);
   const [loadingDomains, setLoadingDomains] = useState(false);
+  const [searchInput, setSearchInput] = useState<string>(value.search || '');
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync searchInput with value.search when it changes externally
+  useEffect(() => {
+    setSearchInput(value.search || '');
+  }, [value.search]);
 
   useEffect(() => {
     const loadDepartments = async () => {
@@ -59,41 +65,94 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
     loadDomains();
   }, []);
 
-  const apply = () => onChange(draft);
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, []);
+
+  const handleFilterChange = (updates: Partial<ActivityFilterState>) => {
+    onChange({ ...value, ...updates });
+  };
+
+  const handleSearchChange = (search: string) => {
+    // Update local state immediately for responsive UI
+    setSearchInput(search);
+
+    // Clear existing timeout
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    // Debounce search to avoid too many API calls while typing
+    searchDebounceRef.current = setTimeout(() => {
+      handleFilterChange({ search: search || undefined });
+    }, 500); // 500ms delay
+  };
 
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2">
-        <input className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Search user/domain/reason" value={draft.search || ''} onChange={(e) => setDraft({ ...draft, search: e.target.value })} />
+        <input 
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" 
+          placeholder="Search user/domain/reason" 
+          value={searchInput} 
+          onChange={(e) => handleSearchChange(e.target.value)} 
+        />
         {usersOptions.length ? (
-          <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.user || ''} onChange={(e) => setDraft({ ...draft, user: e.target.value })}>
+          <select 
+            className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" 
+            value={value.user || ''} 
+            onChange={(e) => handleFilterChange({ user: e.target.value || undefined })}>
             <option value="">All Users</option>
             {usersOptions.map((u) => (
               <option key={u} value={u}>{u}</option>
             ))}
           </select>
         ) : (
-          <input className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" placeholder="Username" value={draft.user || ''} onChange={(e) => setDraft({ ...draft, user: e.target.value })} />
+          <input 
+            className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" 
+            placeholder="Username" 
+            value={value.user || ''} 
+            onChange={(e) => handleFilterChange({ user: e.target.value || undefined })} 
+          />
         )}
-        <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.department || ''} onChange={(e) => setDraft({ ...draft, department: e.target.value })} disabled={loadingDepartments}>
+        <select 
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" 
+          value={value.department || ''} 
+          onChange={(e) => handleFilterChange({ department: e.target.value || undefined })} 
+          disabled={loadingDepartments}>
           <option value="">All Departments</option>
           {departments.map((d) => (
             <option key={d._id} value={d.name}>{d.name}</option>
           ))}
         </select>
-        <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.domain || ''} onChange={(e) => setDraft({ ...draft, domain: e.target.value })} disabled={loadingDomains}>
+        <select 
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" 
+          value={value.domain || ''} 
+          onChange={(e) => handleFilterChange({ domain: e.target.value || undefined })} 
+          disabled={loadingDomains}>
           <option value="">All Domains</option>
           {domains.map((d) => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
-        <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.timeRange || 'all'} onChange={(e) => setDraft({ ...draft, timeRange: e.target.value as any })}>
+        <select 
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" 
+          value={value.timeRange || 'all'} 
+          onChange={(e) => handleFilterChange({ timeRange: e.target.value as any })}>
           <option value="all">All Time</option>
           <option value="today">Today</option>
           <option value="week">This Week</option>
           <option value="month">This Month</option>
         </select>
-        <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={draft.type || ''} onChange={(e) => setDraft({ ...draft, type: e.target.value as any })}>
+        <select 
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" 
+          value={value.type || ''} 
+          onChange={(e) => handleFilterChange({ type: e.target.value as any || undefined })}>
           <option value="">All Types</option>
           <option value="window_activity">window_activity</option>
           <option value="form_interaction">form_interaction</option>
@@ -105,9 +164,6 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
         </select>
       </div>
       <div className="flex items-center gap-2">
-        <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={apply} disabled={loading}>
-          Apply
-        </button>
         <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onRefresh} disabled={loading}>
           {loading ? 'Loading…' : 'Refresh'}
         </button>

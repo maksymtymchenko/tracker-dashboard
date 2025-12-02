@@ -111,6 +111,13 @@ function App(): JSX.Element {
     }
   };
 
+  // Reset activity page to 1 when filters change
+  useEffect(() => {
+    if (user) {
+      setActivityPage(1);
+    }
+  }, [user, filters.search, filters.user, filters.department, filters.domain, filters.timeRange, filters.type]);
+
   useEffect(() => {
     if (!user) return;
     loadSummary();
@@ -268,6 +275,7 @@ function App(): JSX.Element {
                   // Also filter activity by user
                   setFilters({ ...filters, user: username });
                 }}
+                searchQuery={filters.search || ''}
               />
             </div>
           </section>
@@ -285,6 +293,7 @@ function App(): JSX.Element {
             userFilter={shotsUser}
             onUserFilterChange={(u) => { setShotsPage(1); setShotsUser(u); }}
             userRole={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'}
+            searchQuery={filters.search}
           />
 
           {(user?.role === 'ADMIN' || user?.role === 'admin') && <AdminUsers canManage={true} />}

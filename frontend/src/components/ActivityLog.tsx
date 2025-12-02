@@ -13,6 +13,7 @@ interface Props {
   onRefresh(): void;
   onPageChange?(page: number): void;
   onUserClick?(username: string): void;
+  searchQuery?: string;
 }
 
 export function ActivityLog({
@@ -22,12 +23,16 @@ export function ActivityLog({
   onRefresh,
   onPageChange,
   onUserClick,
+  searchQuery: externalSearchQuery = '',
 }: Props): JSX.Element {
   const [open, setOpen] = useState<ActivityItem | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [sortField, setSortField] = useState<SortField>('time');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  
+  // Use external search query if provided, otherwise use local one
+  const searchQuery = externalSearchQuery || localSearchQuery;
   const [screenshotOpen, setScreenshotOpen] = useState<string | null>(null);
   const [screenshotItems, setScreenshotItems] = useState<Array<{ filename: string; url?: string; username: string; domain?: string; mtime?: number }>>([]);
   const [loadingScreenshot, setLoadingScreenshot] = useState(false);
@@ -137,14 +142,35 @@ export function ActivityLog({
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (item) =>
+      filtered = filtered.filter((item) => {
+        // Search in basic fields
+        if (
           item.username.toLowerCase().includes(query) ||
           item.domain?.toLowerCase().includes(query) ||
           item.application?.toLowerCase().includes(query) ||
           item.type.toLowerCase().includes(query) ||
-          item.url?.toLowerCase().includes(query),
-      );
+          item.url?.toLowerCase().includes(query)
+        ) {
+          return true;
+        }
+        
+        // Search in details object (e.g., reason field)
+        if (item.details && typeof item.details === 'object') {
+          const details = item.details as Record<string, unknown>;
+          // Check reason field
+          if (typeof details.reason === 'string' && details.reason.toLowerCase().includes(query)) {
+            return true;
+          }
+          // Also search in other string fields in details
+          for (const value of Object.values(details)) {
+            if (typeof value === 'string' && value.toLowerCase().includes(query)) {
+              return true;
+            }
+          }
+        }
+        
+        return false;
+      });
     }
 
     // Sort
@@ -489,15 +515,17 @@ export function ActivityLog({
     <div>
       {/* Header Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            placeholder="Search activities..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent flex-1 min-w-[200px]"
-          />
-        </div>
+        {!externalSearchQuery && (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search activities..."
+              value={localSearchQuery}
+              onChange={(e) => setLocalSearchQuery(e.target.value)}
+              className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent flex-1 min-w-[200px]"
+            />
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {/* View Mode Toggle */}
           <div className="flex rounded-lg border border-gray-300 dark:border-gray-700 overflow-hidden">

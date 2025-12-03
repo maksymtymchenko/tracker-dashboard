@@ -146,6 +146,7 @@ export function ActivityLog({
         // Search in basic fields
         if (
           item.username.toLowerCase().includes(query) ||
+          (item.displayName && item.displayName.toLowerCase().includes(query)) ||
           item.domain?.toLowerCase().includes(query) ||
           item.application?.toLowerCase().includes(query) ||
           item.type.toLowerCase().includes(query) ||

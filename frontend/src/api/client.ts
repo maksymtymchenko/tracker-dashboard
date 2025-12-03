@@ -51,6 +51,7 @@ export async function fetchActivity(
     user: string;
     username: string;
     department: string;
+    search: string;
     domain: string;
     type: string;
     page: number;

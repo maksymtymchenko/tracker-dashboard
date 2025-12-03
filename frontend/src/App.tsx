@@ -97,6 +97,7 @@ function App(): JSX.Element {
           department: filters.department || undefined,
           domain: filters.domain || undefined,
           type: filters.type || undefined,
+          search: filters.search || undefined,
         }),
       );
     } catch (e: unknown) {

@@ -63,6 +63,7 @@ export async function listActivity(req: Request, res: Response) {
     user: z.string().optional(),
     username: z.string().optional(),
     department: z.string().optional(),
+    search: z.string().optional(),
     domain: z.string().optional(),
     type: z.string().optional(),
     page: z.coerce.number().default(1),
@@ -76,6 +77,20 @@ export async function listActivity(req: Request, res: Response) {
   else if (q.user) filter.username = q.user;
   if (q.domain) filter.domain = q.domain;
   if (q.type) filter.type = q.type;
+
+  // Text search across common fields (username, domain, type, reason, details.reason)
+  if (q.search && q.search.trim()) {
+    const regex = new RegExp(q.search.trim(), 'i');
+    filter.$or = [
+      { username: regex },
+      { domain: regex },
+      { type: regex },
+      // legacy reason field
+      { reason: regex },
+      // new events reason nested in data/details
+      { 'data.reason': regex },
+    ];
+  }
 
   // Handle department filtering
   if (q.department) {

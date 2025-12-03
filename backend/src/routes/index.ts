@@ -22,6 +22,8 @@ import {
   createUser,
   deleteUser,
   adminDeleteUserData,
+  updateUser,
+  setDisplayNameByUsername,
 } from '../controllers/userController.js';
 import {
   listDepartments,
@@ -187,11 +189,20 @@ router.post('/api/users', requireAdmin, strictRateLimiter, createUser);
 
 router.delete('/api/users/:id', requireAdmin, strictRateLimiter, deleteUser);
 
+router.put('/api/users/:id', requireAdmin, strictRateLimiter, updateUser);
+
 router.delete(
   '/api/admin/delete-user/:username',
   requireAdmin,
   strictRateLimiter,
   adminDeleteUserData,
+);
+
+router.post(
+  '/api/users/display-name',
+  requireAdmin,
+  strictRateLimiter,
+  setDisplayNameByUsername,
 );
 
 // Departments (admin)

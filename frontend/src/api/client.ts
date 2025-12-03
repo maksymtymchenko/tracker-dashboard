@@ -112,7 +112,11 @@ export async function fetchUsersAnalytics() {
   const { data } = await api.get<{ items: UserAggregateItem[] }>(
     '/api/analytics/users',
   );
-  return data.items;
+  // Attach a friendly label for charts: prefer displayName, fall back to username
+  return data.items.map((u) => ({
+    ...u,
+    label: u.displayName || u.username,
+  }));
 }
 
 // Departments API
@@ -216,9 +220,28 @@ export async function deleteUserById(id: string) {
   return data;
 }
 
+export async function updateUser(
+  id: string,
+  payload: Partial<Pick<BasicUser, 'displayName'>>,
+) {
+  const { data } = await api.put<{ ok: boolean; success: boolean; user: BasicUser }>(
+    `/api/users/${id}`,
+    payload,
+  );
+  return data.user;
+}
+
 export async function adminDeleteUserAllData(username: string) {
   const { data } = await api.delete<{ success: boolean; message: string }>(
     `/api/admin/delete-user/${encodeURIComponent(username)}`,
+  );
+  return data;
+}
+
+export async function setUserDisplayNameByUsername(username: string, displayName: string) {
+  const { data } = await api.post<{ ok: boolean; success: boolean }>(
+    '/api/users/display-name',
+    { username, displayName },
   );
   return data;
 }

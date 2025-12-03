@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { EventModel } from '../models/Event.js';
 import { UserModel } from '../models/User.js';
+import { UserProfileModel } from '../models/UserProfile.js';
 import { ScreenshotModel } from '../models/Screenshot.js';
 import { DepartmentModel, UserDepartmentModel } from '../models/Department.js';
 
@@ -130,7 +131,7 @@ export async function listActivity(req: Request, res: Response) {
     EventModel.countDocuments(filter),
   ]);
 
-  // enrich with department names based on latest user-department mapping
+  // enrich with department names and display names based on latest mappings
   const usernames = Array.from(new Set(events.map((e: any) => e.username).filter(Boolean))) as string[];
   const userDeps = await UserDepartmentModel.find({ username: { $in: usernames } }).lean();
   const deptIds = Array.from(new Set(userDeps.map((ud) => String(ud.departmentId))));
@@ -141,6 +142,23 @@ export async function listActivity(req: Request, res: Response) {
   userDeps.forEach((ud) => {
     const name = deptIdToName.get(String(ud.departmentId));
     if (name && !userToDeptName.has(ud.username)) userToDeptName.set(ud.username, name);
+  });
+
+  // Resolve display names from User and UserProfile collections
+  const [userDocs, profileDocs] = await Promise.all([
+    UserModel.find({ username: { $in: usernames } }, { username: 1, displayName: 1 }).lean(),
+    UserProfileModel.find({ username: { $in: usernames } }, { username: 1, displayName: 1 }).lean(),
+  ]);
+  const usernameToDisplayName = new Map<string, string>();
+  userDocs.forEach((u: any) => {
+    if (u.username && u.displayName) {
+      usernameToDisplayName.set(u.username, u.displayName);
+    }
+  });
+  profileDocs.forEach((p: any) => {
+    if (p.username && p.displayName && !usernameToDisplayName.has(p.username)) {
+      usernameToDisplayName.set(p.username, p.displayName);
+    }
   });
 
   // Helper function to extract application name from data/details
@@ -163,6 +181,7 @@ export async function listActivity(req: Request, res: Response) {
     _id: (e as any)._id,
     time: (e.timestamp as any)?.toISOString?.() || new Date(e.timestamp as any).toISOString(),
     username: e.username as any,
+    displayName: usernameToDisplayName.get(e.username as any),
     department: userToDeptName.get(e.username as any),
     application: extractApplication(e.data),
     domain: e.domain as any,
@@ -326,7 +345,28 @@ export async function analyticsUsers(_req: Request, res: Response) {
     { $project: { username: '$_id', _id: 0, events: 1, totalTime: 1, domains: 1, domainsCount: { $size: { $setDifference: ['$domains', [null]] } } } },
     { $sort: { events: -1 } },
   ]);
-  const users = agg.map((u: any) => ({ ...u, avgTime: u.events ? Math.round((u.totalTime as number) / (u.events as number)) : 0 }));
+  const usernames = agg.map((u: any) => u.username).filter(Boolean) as string[];
+  const [userDocs, profileDocs] = await Promise.all([
+    UserModel.find({ username: { $in: usernames } }, { username: 1, displayName: 1 }).lean(),
+    UserProfileModel.find({ username: { $in: usernames } }, { username: 1, displayName: 1 }).lean(),
+  ]);
+  const usernameToDisplayName = new Map<string, string>();
+  userDocs.forEach((u: any) => {
+    if (u.username && u.displayName) {
+      usernameToDisplayName.set(u.username, u.displayName);
+    }
+  });
+  profileDocs.forEach((p: any) => {
+    if (p.username && p.displayName && !usernameToDisplayName.has(p.username)) {
+      usernameToDisplayName.set(p.username, p.displayName);
+    }
+  });
+
+  const users = agg.map((u: any) => ({
+    ...u,
+    displayName: usernameToDisplayName.get(u.username as string),
+    avgTime: u.events ? Math.round((u.totalTime as number) / (u.events as number)) : 0,
+  }));
   return res.json({ users, items: users });
 }
 

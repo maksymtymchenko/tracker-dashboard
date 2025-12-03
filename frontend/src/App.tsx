@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { Header } from 'src/components/Header';
 import { KpiCards } from 'src/components/KpiCards';
 import { ActivityLog } from 'src/components/ActivityLog';
@@ -47,6 +47,16 @@ function App(): JSX.Element {
   const [usersOptions, setUsersOptions] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<{ id: string; name: string } | null>(null);
+
+  const displayNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    usersAgg.forEach((u) => {
+      if (u.displayName) {
+        map[u.username] = u.displayName;
+      }
+    });
+    return map;
+  }, [usersAgg]);
 
   useEffect(() => {
     (async () => {
@@ -299,6 +309,7 @@ function App(): JSX.Element {
             onUserFilterChange={(u) => { setShotsPage(1); setShotsUser(u); }}
             userRole={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'}
             searchQuery={filters.search}
+            displayNames={displayNames}
           />
 
           {(user?.role === 'ADMIN' || user?.role === 'admin') && <AdminUsers canManage={true} />}

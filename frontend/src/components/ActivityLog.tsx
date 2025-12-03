@@ -661,12 +661,19 @@ export function ActivityLog({
                         {onUserClick ? (
                           <button
                             onClick={() => onUserClick(row.username)}
-                            className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                            className="text-blue-600 dark:text-blue-400 hover:underline font-medium block text-left"
                           >
-                            {row.username}
+                            {row.displayName || row.username}
                           </button>
                         ) : (
-                          <span className="font-medium">{row.username}</span>
+                          <span className="font-medium block">
+                            {row.displayName || row.username}
+                          </span>
+                        )}
+                        {row.displayName && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {row.username}
+                          </div>
                         )}
                       </td>
                       <td className="py-3 px-4">{row.department || '—'}</td>
@@ -755,10 +762,17 @@ export function ActivityLog({
                           onClick={() => onUserClick(row.username)}
                           className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
                         >
-                          {row.username}
+                          {row.displayName || row.username}
                         </button>
                       ) : (
-                        <span className="font-medium">{row.username}</span>
+                        <span className="font-medium">
+                          {row.displayName || row.username}
+                        </span>
+                      )}
+                      {row.displayName && (
+                        <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                          ({row.username})
+                        </span>
                       )}
                     </div>
                     {row.department && (
@@ -844,10 +858,17 @@ export function ActivityLog({
                                 onClick={() => onUserClick(row.username)}
                                 className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
                               >
-                                {row.username}
+                                {row.displayName || row.username}
                               </button>
                             ) : (
-                              <span className="font-medium">{row.username}</span>
+                              <span className="font-medium">
+                                {row.displayName || row.username}
+                              </span>
+                            )}
+                            {row.displayName && (
+                              <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                                ({row.username})
+                              </span>
                             )}
                             {row.department && (
                               <span className="text-gray-400 dark:text-gray-500">
@@ -982,12 +1003,17 @@ export function ActivityLog({
                         }}
                         className="text-blue-600 dark:text-blue-400 hover:underline"
                       >
-                        {open.username}
+                        {open.displayName || open.username}
                       </button>
                     ) : (
-                      open.username
+                      open.displayName || open.username
                     )}
                   </div>
+                  {open.displayName && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {open.username}
+                    </div>
+                  )}
                 </div>
                 {open.department && (
                   <div>

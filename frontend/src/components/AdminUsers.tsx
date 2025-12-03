@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BasicUser } from 'src/types';
-import { listUsers, listDistinctUsers, deleteUserById, adminDeleteUserAllData } from 'src/api/client';
+import { listUsers, listDistinctUsers, deleteUserById, adminDeleteUserAllData, updateUser, setUserDisplayNameByUsername, fetchUsersAnalytics } from 'src/api/client';
 
 interface Props {
   canManage: boolean;
@@ -13,6 +13,7 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
   const [error, setError] = useState<string | undefined>();
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
+  const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
 
   const load = async () => {
     if (!canManage) return;
@@ -20,10 +21,16 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
     setError(undefined);
     try {
       // Prefer distinct usernames from events (works for non-admin viewers too)
-      const [names, adminUsers] = await Promise.all([
+      const [names, adminUsers, analyticsUsers] = await Promise.all([
         listDistinctUsers(),
         listUsers().catch(() => [] as BasicUser[]),
+        fetchUsersAnalytics().catch(() => []),
       ]);
+      const dn: Record<string, string> = {};
+      analyticsUsers.forEach((u) => {
+        if (u.displayName) dn[u.username] = u.displayName;
+      });
+      setDisplayNames(dn);
       setUsernames(names);
       setUsers(adminUsers);
       setPage(1);
@@ -61,6 +68,7 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400">
             <tr>
+              <th className="py-2 px-2 text-left">Name</th>
               <th className="py-2 px-2 text-left">Username</th>
               <th className="py-2 px-2 text-left">Role</th>
               <th className="py-2 px-2">Actions</th>
@@ -69,9 +77,15 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
           <tbody>
             {pageItems.map((uname) => {
               const adminUser = users.find((x) => x.username === uname);
+              const display = displayNames[uname] || adminUser?.displayName || uname;
               return (
               <tr key={uname} className="border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50/70 dark:hover:bg-gray-900/60 transition-colors">
-                <td className="py-2 px-2">{uname}</td>
+                <td className="py-2 px-2">
+                  <div className="font-medium">{display}</div>
+                </td>
+                <td className="py-2 px-2">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{uname}</span>
+                </td>
                 <td className="py-2 px-2">{adminUser?.role ?? '—'}</td>
                 <td className="py-2 px-2 text-right space-x-2">
                   <button
@@ -90,6 +104,30 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
                     }}
                   >
                     Delete Data
+                  </button>
+                  <button
+                    className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
+                    onClick={async () => {
+                      const current = adminUser?.displayName || '';
+                      const next = window.prompt(`Set display name for ${uname}`, current);
+                      if (next === null) return;
+                      const value = next.trim();
+                      setLoading(true);
+                      try {
+                        if (adminUser?._id) {
+                          await updateUser(adminUser._id, { displayName: value || undefined });
+                        } else if (value) {
+                          await setUserDisplayNameByUsername(uname, value);
+                        }
+                        await load();
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : 'Failed to update display name');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                  >
+                    Set Name
                   </button>
                   <button
                     className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
@@ -117,7 +155,7 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
             )})}
             {!pageItems.length && (
               <tr className="border-t border-gray-100 dark:border-gray-800">
-                <td className="py-6 px-2 text-center text-gray-500 dark:text-gray-400" colSpan={3}>
+                <td className="py-6 px-2 text-center text-gray-500 dark:text-gray-400" colSpan={4}>
                   {loading ? 'Loading…' : 'No users'}
                 </td>
               </tr>

@@ -74,9 +74,15 @@ export function DomainActivityChart({ data, loading, error, onUserClick }: Props
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || !payload[0]) return null;
     const data = payload[0].payload;
+    const label = data.displayName || data.username;
     return (
       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg text-sm">
-        <div className="font-medium mb-1">{data.username}</div>
+        <div className="font-medium mb-1">{label}</div>
+        {data.displayName && (
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+            Username: {data.username}
+          </div>
+        )}
         <div className="text-gray-600 dark:text-gray-300">
           Time: <span className="font-semibold text-blue-600 dark:text-blue-400">{formatDuration(data.totalTime)}</span>
         </div>
@@ -95,7 +101,7 @@ export function DomainActivityChart({ data, loading, error, onUserClick }: Props
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ left: 12, right: 12, bottom: 12, top: 12 }} barCategoryGap="20%">
               <CartesianGrid stroke="#e5e7eb" strokeOpacity={0.3} />
-              <XAxis dataKey="username" tick={{ fontSize: 12 }} hide={false} interval={0} angle={-30} textAnchor="end" height={50} />
+              <XAxis dataKey="label" tick={{ fontSize: 12 }} hide={false} interval={0} angle={-30} textAnchor="end" height={50} />
               <YAxis 
                 tick={{ fontSize: 12 }} 
                 tickFormatter={(value) => {

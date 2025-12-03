@@ -19,6 +19,8 @@ interface Props {
   onUserFilterChange?(username: string): void;
   userRole?: 'admin' | 'user';
   searchQuery?: string;
+  /** Optional map of username -> display name for showing real names */
+  displayNames?: Record<string, string>;
 }
 
 export function Screenshots({
@@ -35,6 +37,7 @@ export function Screenshots({
   onUserFilterChange,
   userRole,
   searchQuery: externalSearchQuery,
+  displayNames,
 }: Props): JSX.Element {
   const [open, setOpen] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -71,6 +74,10 @@ export function Screenshots({
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
     return date.toLocaleDateString();
+  };
+
+  const getUserLabel = (username: string): string => {
+    return displayNames?.[username] || username;
   };
 
   // Sort and filter screenshots
@@ -428,7 +435,12 @@ export function Screenshots({
                     </div>
                     <div className="mt-1.5 space-y-0.5">
                       <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {s.username}
+                        {getUserLabel(s.username)}
+                        {displayNames?.[s.username] && displayNames[s.username] !== s.username && (
+                          <span className="ml-1 text-gray-400">
+                            ({s.username})
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-400 dark:text-gray-500">
                         {formatTime(s.mtime)}
@@ -485,7 +497,14 @@ export function Screenshots({
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">{s.filename}</div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        {s.username} • {formatTime(s.mtime)}
+                        {getUserLabel(s.username)}
+                        {displayNames?.[s.username] && displayNames[s.username] !== s.username && (
+                          <span className="ml-1 text-gray-400">
+                            ({s.username})
+                          </span>
+                        )}
+                        {' • '}
+                        {formatTime(s.mtime)}
                       </div>
                       {s.domain && (
                         <div className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">
@@ -587,7 +606,13 @@ export function Screenshots({
                 <div className="text-white mb-2 font-medium">{currentScreenshot.filename}</div>
                 <div className="flex flex-wrap gap-4 text-sm text-white/80">
                   <div>
-                    <span className="text-white/60">User:</span> {currentScreenshot.username}
+                    <span className="text-white/60">User:</span>{' '}
+                    {getUserLabel(currentScreenshot.username)}
+                    {displayNames?.[currentScreenshot.username] && displayNames[currentScreenshot.username] !== currentScreenshot.username && (
+                      <span className="text-white/60 ml-1 text-xs">
+                        ({currentScreenshot.username})
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className="text-white/60">Time:</span> {formatTime(currentScreenshot.mtime)}
@@ -807,7 +832,12 @@ export function Screenshots({
                         </div>
                         <div className="mt-1.5 space-y-0.5">
                           <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {s.username}
+                            {getUserLabel(s.username)}
+                            {displayNames?.[s.username] && displayNames[s.username] !== s.username && (
+                              <span className="ml-1 text-gray-400">
+                                ({s.username})
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-gray-400 dark:text-gray-500">
                             {formatTime(s.mtime)}

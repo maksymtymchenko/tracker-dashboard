@@ -1,12 +1,16 @@
 export interface AuthUser {
   username: string;
   role: 'admin' | 'user' | 'ADMIN' | 'VIEWER';
+  /** Optional human-friendly display name for the employee */
+  displayName?: string;
 }
 
 export interface ActivityItem {
   _id?: string;
   time: string;
   username: string;
+  /** Optional human-friendly display name for the employee */
+  displayName?: string;
   department?: string;
   application?: string;
   domain?: string;
@@ -39,11 +43,26 @@ export interface ScreenshotItem {
 }
 
 export interface TopDomainItem { domain: string; count: number }
-export interface UserAggregateItem { username: string; events: number; totalTime: number; domainsCount: number }
+export interface UserAggregateItem {
+  username: string;
+  /** Optional human-friendly display name returned from analytics */
+  displayName?: string;
+  /** Precomputed label for charts: displayName or username */
+  label?: string;
+  events: number;
+  totalTime: number;
+  domainsCount: number;
+}
 
 export interface Department { _id: string; name: string; color?: string; description?: string }
 export interface UserDepartment { _id: string; username: string; departmentId: string }
-export interface BasicUser { _id: string; username: string; role: 'admin' | 'user' }
+export interface BasicUser {
+  _id: string;
+  username: string;
+  role: 'admin' | 'user' | 'ADMIN' | 'VIEWER';
+  /** Optional human-friendly display name editable from the admin panel */
+  displayName?: string;
+}
 
 export interface DepartmentAnalytics {
   id: string;

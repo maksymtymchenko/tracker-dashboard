@@ -23,13 +23,15 @@ export async function updateDepartment(req: Request, res: Response) {
   const schemaDirect = z.object({ name: z.string().optional(), color: z.string().optional(), description: z.string().optional() });
   const schemaWrapped = z.object({ updates: schemaDirect });
   // Try wrapped schema first, then direct schema
-  let parsed = schemaWrapped.safeParse(req.body);
-  if (!parsed.success) {
-    parsed = schemaDirect.safeParse(req.body);
+  const wrappedParsed = schemaWrapped.safeParse(req.body);
+  const directParsed = schemaDirect.safeParse(req.body);
+  
+  if (!wrappedParsed.success && !directParsed.success) {
+    return res.status(400).json({ error: 'invalid payload', issues: directParsed.error.issues });
   }
-  if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
+  
   const { id } = req.params;
-  const updates: any = (parsed as any).data.updates || (parsed as any).data;
+  const updates: any = wrappedParsed.success ? wrappedParsed.data.updates : directParsed.data;
   const dep = await DepartmentModel.findByIdAndUpdate(id, updates, { new: true });
   return res.json({ ok: true, success: true, id, department: dep ? { id, name: dep.name, color: dep.color, description: dep.description } : undefined });
 }

@@ -284,7 +284,6 @@ function App(): JSX.Element {
                 data={activity}
                 loading={activityLoading}
                 error={activityError}
-                onRefresh={loadActivity}
                 onPageChange={(p) => setActivityPage(p)}
                 onUserClick={(username) => {
                   setSelectedUser(username);

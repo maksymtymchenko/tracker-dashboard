@@ -10,7 +10,6 @@ interface Props {
   data: Paginated<ActivityItem> | null;
   loading: boolean;
   error?: string;
-  onRefresh(): void;
   onPageChange?(page: number): void;
   onUserClick?(username: string): void;
   searchQuery?: string;
@@ -20,7 +19,6 @@ export function ActivityLog({
   data,
   loading,
   error,
-  onRefresh,
   onPageChange,
   onUserClick,
   searchQuery: externalSearchQuery = '',
@@ -583,13 +581,6 @@ export function ActivityLog({
               Timeline
             </button>
           </div>
-          <button
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-            onClick={onRefresh}
-            disabled={loading}
-          >
-            {loading ? 'Loading…' : 'Refresh'}
-          </button>
         </div>
       </div>
 

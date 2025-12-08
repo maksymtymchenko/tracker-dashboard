@@ -6,9 +6,10 @@ interface HeaderProps {
   dark: boolean;
   onToggleDark(): void;
   onLogout(): void;
+  onManageDepartments?(): void;
 }
 
-export function Header({ username, role, dark, onToggleDark, onLogout }: HeaderProps): JSX.Element {
+export function Header({ username, role, dark, onToggleDark, onLogout, onManageDepartments }: HeaderProps): JSX.Element {
   return (
     <header className="border-b border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-gray-950/60 backdrop-blur sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -20,6 +21,11 @@ export function Header({ username, role, dark, onToggleDark, onLogout }: HeaderP
           {username && <span className="text-xs text-gray-500 dark:text-gray-400">{username}</span>}
         </div>
         <div className="flex items-center gap-3">
+          {onManageDepartments && (
+            <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onManageDepartments}>
+              Manage Departments
+            </button>
+          )}
           <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 transition-colors hover:border-gray-400 dark:hover:border-gray-600" onClick={onToggleDark}>
             {dark ? 'Light' : 'Dark'} Mode
           </button>

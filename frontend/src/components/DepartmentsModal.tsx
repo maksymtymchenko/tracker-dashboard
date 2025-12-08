@@ -9,6 +9,7 @@ import {
   unassignUserDepartment as apiUnassign,
   listUsers,
   listDistinctUsers,
+  fetchUsersAnalytics,
 } from 'src/api/client';
 import { Department, UserDepartment, BasicUser } from 'src/types';
 
@@ -30,6 +31,9 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
   const [selectedDeptId, setSelectedDeptId] = useState<string | undefined>();
   const [assignUser, setAssignUser] = useState<string>('');
   const [assignDept, setAssignDept] = useState<string>('');
+  const [filterDept, setFilterDept] = useState<string>('');
+  const [quickAssignUser, setQuickAssignUser] = useState<string | null>(null);
+  const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
 
   const usernameToDeptIds = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -45,18 +49,26 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
     setLoading(true);
     setError(undefined);
     try {
-      const [deps, uds, us, names] = await Promise.all([
+      const [deps, uds, us, names, analyticsUsers] = await Promise.all([
         listDepartments(),
         listUserDepartments(),
         // admin users (may fail if not admin)
         listUsers().catch(() => [] as BasicUser[]),
         // distinct usernames from events
         listDistinctUsers(),
+        // fetch users analytics for display names
+        fetchUsersAnalytics().catch(() => []),
       ]);
       setDepartments(deps);
       setUserDepts(uds);
       setUsers(us);
       setUsernames(names);
+      // Build displayNames map
+      const dn: Record<string, string> = {};
+      analyticsUsers.forEach((u) => {
+        if (u.displayName) dn[u.username] = u.displayName;
+      });
+      setDisplayNames(dn);
       if (!assignDept && deps[0]?._id) setAssignDept(deps[0]._id);
       setUsersPage(1);
     } catch (e: unknown) {
@@ -113,6 +125,21 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
     setLoading(true);
     try {
       await apiAssign({ username: assignUser, departmentId: assignDept });
+      setAssignUser('');
+      setAssignDept('');
+      await load();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to assign');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const quickAssign = async (username: string, departmentId: string) => {
+    setLoading(true);
+    try {
+      await apiAssign({ username, departmentId });
+      setQuickAssignUser(null);
       await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to assign');
@@ -223,6 +250,22 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
 
             <div className="space-y-3">
               <div className="font-medium">User Assignments</div>
+              <div className="flex items-center gap-2">
+                <select 
+                  className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" 
+                  value={filterDept} 
+                  onChange={(e) => {
+                    setFilterDept(e.target.value);
+                    setUsersPage(1);
+                  }}
+                >
+                  <option value="">All Departments</option>
+                  <option value="__NO_DEPT__">No Departments</option>
+                  {departments.map((d) => (
+                    <option key={d._id} value={d._id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={assignUser} onChange={(e) => setAssignUser(e.target.value)}>
                   <option value="">Select User</option>
@@ -249,18 +292,34 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                   </thead>
                   <tbody>
                     {(() => {
-                      const all = usernames.length ? usernames : users.map((u) => u.username);
+                      let all = usernames.length ? usernames : users.map((u) => u.username);
+                      
+                      // Filter by department if selected
+                      if (filterDept === '__NO_DEPT__') {
+                        // Show only users with no department assignments
+                        const usersWithDepts = new Set(userDepts.map((ud) => ud.username));
+                        all = all.filter((uname) => !usersWithDepts.has(uname));
+                      } else if (filterDept) {
+                        // Show only users assigned to the selected department
+                        const deptUserIds = userDepts
+                          .filter((ud) => ud.departmentId === filterDept)
+                          .map((ud) => ud.username);
+                        all = all.filter((uname) => deptUserIds.includes(uname));
+                      }
+                      
                       const total = all.length;
                       const start = (usersPage - 1) * usersLimit;
                       const pageItems = all.slice(start, start + usersLimit);
                       return pageItems.map((uname) => {
                       const deptIds = usernameToDeptIds.get(uname) || [];
                       const userDepartments = departments.filter((d) => deptIds.includes(d._id));
+                      const displayName = displayNames[uname];
+                      const userLabel = displayName && displayName !== uname ? `${displayName} (${uname})` : uname;
                       return (
                         <tr key={uname} className="border-t border-gray-100 dark:border-gray-800">
-                          <td className="py-2 px-2">{uname}</td>
+                          <td className="py-2 px-2">{userLabel}</td>
                           <td className="py-2 px-2">
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               {userDepartments.length ? (
                                 userDepartments.map((d) => (
                                   <span key={d._id} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700">
@@ -270,7 +329,36 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                                   </span>
                                 ))
                               ) : (
-                                <span className="text-xs text-gray-500">No departments</span>
+                                quickAssignUser === uname ? (
+                                  <div className="relative inline-block">
+                                    <select
+                                      className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
+                                      value=""
+                                      onChange={(e) => {
+                                        if (e.target.value) {
+                                          quickAssign(uname, e.target.value);
+                                        } else {
+                                          setQuickAssignUser(null);
+                                        }
+                                      }}
+                                      autoFocus
+                                      onBlur={() => setQuickAssignUser(null)}
+                                    >
+                                      <option value="">Select department...</option>
+                                      {departments.map((d) => (
+                                        <option key={d._id} value={d._id}>{d.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                ) : (
+                                  <button
+                                    className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                                    onClick={() => setQuickAssignUser(uname)}
+                                    disabled={loading}
+                                  >
+                                    + Add department
+                                  </button>
+                                )
                               )}
                             </div>
                           </td>
@@ -282,7 +370,22 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                 </table>
                 <div className="flex items-center justify-between p-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-800">
                   <div>
-                    Page {usersPage}
+                    {(() => {
+                      let all = usernames.length ? usernames : users.map((u) => u.username);
+                      if (filterDept === '__NO_DEPT__') {
+                        const usersWithDepts = new Set(userDepts.map((ud) => ud.username));
+                        all = all.filter((uname) => !usersWithDepts.has(uname));
+                      } else if (filterDept) {
+                        const deptUserIds = userDepts
+                          .filter((ud) => ud.departmentId === filterDept)
+                          .map((ud) => ud.username);
+                        all = all.filter((uname) => deptUserIds.includes(uname));
+                      }
+                      const total = all.length;
+                      const start = (usersPage - 1) * usersLimit;
+                      const end = Math.min(start + usersLimit, total);
+                      return `Page ${usersPage} (${start + 1}-${end} of ${total})`;
+                    })()}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -295,13 +398,31 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                     <button
                       className="px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700"
                       onClick={() => {
-                        const all = usernames.length ? usernames : users.map((u) => u.username);
+                        let all = usernames.length ? usernames : users.map((u) => u.username);
+                        if (filterDept === '__NO_DEPT__') {
+                          const usersWithDepts = new Set(userDepts.map((ud) => ud.username));
+                          all = all.filter((uname) => !usersWithDepts.has(uname));
+                        } else if (filterDept) {
+                          const deptUserIds = userDepts
+                            .filter((ud) => ud.departmentId === filterDept)
+                            .map((ud) => ud.username);
+                          all = all.filter((uname) => deptUserIds.includes(uname));
+                        }
                         const total = all.length;
                         const maxPage = Math.max(1, Math.ceil(total / usersLimit));
                         setUsersPage((p) => Math.min(maxPage, p + 1));
                       }}
                       disabled={(() => {
-                        const all = usernames.length ? usernames : users.map((u) => u.username);
+                        let all = usernames.length ? usernames : users.map((u) => u.username);
+                        if (filterDept === '__NO_DEPT__') {
+                          const usersWithDepts = new Set(userDepts.map((ud) => ud.username));
+                          all = all.filter((uname) => !usersWithDepts.has(uname));
+                        } else if (filterDept) {
+                          const deptUserIds = userDepts
+                            .filter((ud) => ud.departmentId === filterDept)
+                            .map((ud) => ud.username);
+                          all = all.filter((uname) => deptUserIds.includes(uname));
+                        }
                         const total = all.length;
                         return usersPage * usersLimit >= total;
                       })()}

@@ -18,12 +18,11 @@ interface Props {
   onExportJSON(): void;
   onRefresh(): void;
   loading?: boolean;
-  onManageDepartments?(): void;
   usersOptions?: string[];
   displayNames?: Record<string, string>;
 }
 
-export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, onRefresh, loading, onManageDepartments, usersOptions = [], displayNames = {} }: Props): JSX.Element {
+export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, onRefresh, loading, usersOptions = [], displayNames = {} }: Props): JSX.Element {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
   const [domains, setDomains] = useState<string[]>([]);
@@ -173,9 +172,6 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
           {loading ? 'Loading…' : 'Refresh'}
         </button>
         <div className="ml-auto flex gap-2">
-          {onManageDepartments && (
-            <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onManageDepartments}>Manage Departments</button>
-          )}
           <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onExportCSV}>Export CSV</button>
           <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onExportJSON}>Export JSON</button>
         </div>

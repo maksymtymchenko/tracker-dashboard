@@ -247,7 +247,14 @@ function App(): JSX.Element {
   return (
     <div className={dark ? 'dark' : ''}>
       <div className="min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
-        <Header username={user?.username} role={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'} dark={dark} onToggleDark={() => setDark((v) => !v)} onLogout={handleLogout} />
+        <Header 
+          username={user?.username} 
+          role={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'} 
+          dark={dark} 
+          onToggleDark={() => setDark((v) => !v)} 
+          onLogout={handleLogout}
+          onManageDepartments={() => setShowDepartments(true)}
+        />
 
         <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
           <section>
@@ -293,7 +300,6 @@ function App(): JSX.Element {
               onExportJSON={() => window.open('/api/export/json', '_blank')}
               onRefresh={loadActivity}
               loading={activityLoading}
-              onManageDepartments={() => setShowDepartments(true)}
               usersOptions={usersOptions}
               displayNames={displayNames}
             />

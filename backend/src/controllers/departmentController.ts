@@ -22,7 +22,11 @@ export async function createDepartment(req: Request, res: Response) {
 export async function updateDepartment(req: Request, res: Response) {
   const schemaDirect = z.object({ name: z.string().optional(), color: z.string().optional(), description: z.string().optional() });
   const schemaWrapped = z.object({ updates: schemaDirect });
-  const parsed = schemaWrapped.safeParse(req.body) || schemaDirect.safeParse(req.body);
+  // Try wrapped schema first, then direct schema
+  let parsed = schemaWrapped.safeParse(req.body);
+  if (!parsed.success) {
+    parsed = schemaDirect.safeParse(req.body);
+  }
   if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
   const { id } = req.params;
   const updates: any = (parsed as any).data.updates || (parsed as any).data;

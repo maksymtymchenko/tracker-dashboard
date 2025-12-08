@@ -29,7 +29,10 @@ export async function collectActivity(req: Request, res: Response) {
   const body = z
     .object({ events: z.array(z.union([NewEventShape, OldEventShape])) })
     .safeParse(req.body);
-  if (!body.success) return res.status(400).json({ error: 'invalid payload', issues: body.error.issues });
+  if (!body.success)
+    return res
+      .status(400)
+      .json({ error: 'invalid payload', issues: body.error.issues });
   const docs = await EventModel.insertMany(
     body.data.events.map((e) =>
       'time' in e
@@ -55,7 +58,12 @@ export async function collectActivity(req: Request, res: Response) {
           },
     ),
   );
-  return res.json({ received: docs.length, saved: docs.length, message: 'Events stored successfully', timestamp: new Date().toISOString() });
+  return res.json({
+    received: docs.length,
+    saved: docs.length,
+    message: 'Events stored successfully',
+    timestamp: new Date().toISOString(),
+  });
 }
 
 export async function listActivity(req: Request, res: Response) {
@@ -73,15 +81,78 @@ export async function listActivity(req: Request, res: Response) {
   const q = querySchema.parse(req.query);
 
   const filter: Record<string, unknown> = {};
-  if (q.username) filter.username = q.username;
-  else if (q.user) filter.username = q.user;
+
+  // Handle user filter - check both username and displayName
+  if (q.username || q.user) {
+    const userFilter = (q.username || q.user) as string;
+    // First try using it as a username directly (most common case from dropdown)
+    // Also check if it matches a displayName (for manual input or search)
+    const [directUserMatch, displayNameMatch] = await Promise.all([
+      UserModel.findOne({ username: userFilter }, { username: 1 }).lean(),
+      UserModel.findOne({ displayName: userFilter }, { username: 1 }).lean(),
+    ]);
+
+    if (directUserMatch) {
+      // It's a username, use it directly
+      filter.username = userFilter;
+    } else if (displayNameMatch) {
+      // It's a displayName, use the corresponding username
+      filter.username = displayNameMatch.username;
+    } else {
+      // Try case-insensitive partial match on displayName
+      const displayNameRegex = new RegExp(userFilter, 'i');
+      const [displayNameMatches, profileMatches] = await Promise.all([
+        UserModel.find(
+          { displayName: displayNameRegex },
+          { username: 1 },
+        ).lean(),
+        UserProfileModel.find(
+          { displayName: displayNameRegex },
+          { username: 1 },
+        ).lean(),
+      ]);
+
+      const allMatches = [...displayNameMatches, ...profileMatches];
+      if (allMatches.length > 0) {
+        const usernames = Array.from(
+          new Set(allMatches.map((u: any) => u.username).filter(Boolean)),
+        );
+        if (usernames.length > 0) {
+          filter.username =
+            usernames.length === 1 ? usernames[0] : { $in: usernames };
+        } else {
+          // No match found, but still try using it as username (user might not be in UserModel)
+          filter.username = userFilter;
+        }
+      } else {
+        // No displayName match found, use it as username directly
+        // (user might exist in events but not in UserModel)
+        filter.username = userFilter;
+      }
+    }
+  }
+
   if (q.domain) filter.domain = q.domain;
   if (q.type) filter.type = q.type;
 
-  // Text search across common fields (username, domain, type, reason, details.reason)
+  // Text search across common fields (username, domain, type, reason, details.reason, and displayName)
   if (q.search && q.search.trim()) {
     const regex = new RegExp(q.search.trim(), 'i');
-    filter.$or = [
+    // Find usernames that match the search in their displayName
+    const displayNameMatches = await UserModel.find(
+      { displayName: regex },
+      { username: 1 },
+    ).lean();
+    const profileDisplayNameMatches = await UserProfileModel.find(
+      { displayName: regex },
+      { username: 1 },
+    ).lean();
+    const matchingUsernames = [
+      ...displayNameMatches.map((u: any) => u.username),
+      ...profileDisplayNameMatches.map((p: any) => p.username),
+    ].filter(Boolean);
+
+    const searchConditions: any[] = [
       { username: regex },
       { domain: regex },
       { type: regex },
@@ -90,20 +161,46 @@ export async function listActivity(req: Request, res: Response) {
       // new events reason nested in data/details
       { 'data.reason': regex },
     ];
+
+    // Add username matches from displayName search
+    if (matchingUsernames.length > 0) {
+      searchConditions.push({ username: { $in: matchingUsernames } });
+    }
+
+    filter.$or = searchConditions;
   }
 
   // Handle department filtering
   if (q.department) {
-    const department = await DepartmentModel.findOne({ name: q.department }).lean();
+    const department = await DepartmentModel.findOne({
+      name: q.department,
+    }).lean();
     if (department) {
-      const userDepts = await UserDepartmentModel.find({ departmentId: (department as any)._id }).lean();
-      const departmentUsernames = Array.from(new Set(userDepts.map((ud) => ud.username))).filter(Boolean) as string[];
+      const userDepts = await UserDepartmentModel.find({
+        departmentId: (department as any)._id,
+      }).lean();
+      const departmentUsernames = Array.from(
+        new Set(userDepts.map((ud) => ud.username)),
+      ).filter(Boolean) as string[];
       if (departmentUsernames.length > 0) {
         // If username filter is already set, intersect with department users
         if (filter.username) {
           if (!departmentUsernames.includes(filter.username as string)) {
             // User is not in this department, return empty results
-            return res.json({ items: [], page: q.page, limit: q.limit || 20, total: 0, count: 0, stats: { totalEvents: 0, uniqueUsers: 0, uniqueDomains: 0, totalDuration: 0, averageDuration: 0 } });
+            return res.json({
+              items: [],
+              page: q.page,
+              limit: q.limit || 20,
+              total: 0,
+              count: 0,
+              stats: {
+                totalEvents: 0,
+                uniqueUsers: 0,
+                uniqueDomains: 0,
+                totalDuration: 0,
+                averageDuration: 0,
+              },
+            });
           }
         } else {
           // Filter by all users in this department
@@ -111,11 +208,37 @@ export async function listActivity(req: Request, res: Response) {
         }
       } else {
         // No users in this department, return empty results
-        return res.json({ items: [], page: q.page, limit: q.limit || 20, total: 0, count: 0, stats: { totalEvents: 0, uniqueUsers: 0, uniqueDomains: 0, totalDuration: 0, averageDuration: 0 } });
+        return res.json({
+          items: [],
+          page: q.page,
+          limit: q.limit || 20,
+          total: 0,
+          count: 0,
+          stats: {
+            totalEvents: 0,
+            uniqueUsers: 0,
+            uniqueDomains: 0,
+            totalDuration: 0,
+            averageDuration: 0,
+          },
+        });
       }
     } else {
       // Department not found, return empty results
-      return res.json({ items: [], page: q.page, limit: q.limit || 20, total: 0, count: 0, stats: { totalEvents: 0, uniqueUsers: 0, uniqueDomains: 0, totalDuration: 0, averageDuration: 0 } });
+      return res.json({
+        items: [],
+        page: q.page,
+        limit: q.limit || 20,
+        total: 0,
+        count: 0,
+        stats: {
+          totalEvents: 0,
+          uniqueUsers: 0,
+          uniqueDomains: 0,
+          totalDuration: 0,
+          averageDuration: 0,
+        },
+      });
     }
   }
 
@@ -142,27 +265,44 @@ export async function listActivity(req: Request, res: Response) {
   const skip = (page - 1) * limit;
 
   const [events, total] = await Promise.all([
-    EventModel.find(filter).sort({ timestamp: -1 }).skip(skip).limit(limit).lean(),
+    EventModel.find(filter)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     EventModel.countDocuments(filter),
   ]);
 
   // enrich with department names and display names based on latest mappings
-  const usernames = Array.from(new Set(events.map((e: any) => e.username).filter(Boolean))) as string[];
-  const userDeps = await UserDepartmentModel.find({ username: { $in: usernames } }).lean();
-  const deptIds = Array.from(new Set(userDeps.map((ud) => String(ud.departmentId))));
+  const usernames = Array.from(
+    new Set(events.map((e: any) => e.username).filter(Boolean)),
+  ) as string[];
+  const userDeps = await UserDepartmentModel.find({
+    username: { $in: usernames },
+  }).lean();
+  const deptIds = Array.from(
+    new Set(userDeps.map((ud) => String(ud.departmentId))),
+  );
   const depts = await DepartmentModel.find({ _id: { $in: deptIds } }).lean();
   const deptIdToName = new Map<string, string>();
   depts.forEach((d) => deptIdToName.set(String((d as any)._id), d.name));
   const userToDeptName = new Map<string, string>();
   userDeps.forEach((ud) => {
     const name = deptIdToName.get(String(ud.departmentId));
-    if (name && !userToDeptName.has(ud.username)) userToDeptName.set(ud.username, name);
+    if (name && !userToDeptName.has(ud.username))
+      userToDeptName.set(ud.username, name);
   });
 
   // Resolve display names from User and UserProfile collections
   const [userDocs, profileDocs] = await Promise.all([
-    UserModel.find({ username: { $in: usernames } }, { username: 1, displayName: 1 }).lean(),
-    UserProfileModel.find({ username: { $in: usernames } }, { username: 1, displayName: 1 }).lean(),
+    UserModel.find(
+      { username: { $in: usernames } },
+      { username: 1, displayName: 1 },
+    ).lean(),
+    UserProfileModel.find(
+      { username: { $in: usernames } },
+      { username: 1, displayName: 1 },
+    ).lean(),
   ]);
   const usernameToDisplayName = new Map<string, string>();
   userDocs.forEach((u: any) => {
@@ -187,14 +327,18 @@ export async function listActivity(req: Request, res: Response) {
       (typeof d.appName === 'string' ? d.appName : undefined) ||
       (typeof d.app_name === 'string' ? d.app_name : undefined) ||
       // Sometimes title contains app name (e.g., "Chrome - Example.com")
-      (typeof d.title === 'string' && d.title.includes(' - ') ? d.title.split(' - ')[0] : undefined)
+      (typeof d.title === 'string' && d.title.includes(' - ')
+        ? d.title.split(' - ')[0]
+        : undefined)
     );
   };
 
   // map DB schema to frontend ActivityItem shape
   const items = events.map((e: any) => ({
     _id: (e as any)._id,
-    time: (e.timestamp as any)?.toISOString?.() || new Date(e.timestamp as any).toISOString(),
+    time:
+      (e.timestamp as any)?.toISOString?.() ||
+      new Date(e.timestamp as any).toISOString(),
     username: e.username as any,
     displayName: usernameToDisplayName.get(e.username as any),
     department: userToDeptName.get(e.username as any),
@@ -226,12 +370,22 @@ export async function listActivity(req: Request, res: Response) {
           uniqueUsers: { $size: '$users' },
           uniqueDomains: { $size: '$domains' },
           averageDuration: {
-            $cond: [{ $gt: ['$totalEvents', 0] }, { $divide: ['$totalDuration', '$totalEvents'] }, 0],
+            $cond: [
+              { $gt: ['$totalEvents', 0] },
+              { $divide: ['$totalDuration', '$totalEvents'] },
+              0,
+            ],
           },
         },
       },
     ]);
-    const stats = agg[0] || { totalEvents: 0, uniqueUsers: 0, uniqueDomains: 0, totalDuration: 0, averageDuration: 0 };
+    const stats = agg[0] || {
+      totalEvents: 0,
+      uniqueUsers: 0,
+      uniqueDomains: 0,
+      totalDuration: 0,
+      averageDuration: 0,
+    };
     const legacyEvents = events.map((e: any) => ({
       username: e.username,
       domain: e.domain,
@@ -263,13 +417,30 @@ export async function listActivity(req: Request, res: Response) {
         uniqueUsers: { $size: '$users' },
         uniqueDomains: { $size: '$domains' },
         averageDuration: {
-          $cond: [{ $gt: ['$totalEvents', 0] }, { $divide: ['$totalDuration', '$totalEvents'] }, 0],
+          $cond: [
+            { $gt: ['$totalEvents', 0] },
+            { $divide: ['$totalDuration', '$totalEvents'] },
+            0,
+          ],
         },
       },
     },
   ]);
-  const compatStats = legacyAgg[0] || { totalEvents: 0, uniqueUsers: 0, uniqueDomains: 0, totalDuration: 0, averageDuration: 0 };
-  return res.json({ items, page, limit, total, count: events.length, stats: compatStats });
+  const compatStats = legacyAgg[0] || {
+    totalEvents: 0,
+    uniqueUsers: 0,
+    uniqueDomains: 0,
+    totalDuration: 0,
+    averageDuration: 0,
+  };
+  return res.json({
+    items,
+    page,
+    limit,
+    total,
+    count: events.length,
+    stats: compatStats,
+  });
 }
 
 export async function analyticsSummary(_req: Request, res: Response) {
@@ -292,28 +463,59 @@ export async function analyticsSummary(_req: Request, res: Response) {
               domains: { $addToSet: '$domain' },
             },
           },
-          { $project: { _id: 0, events: 1, duration: 1, users: { $size: '$users' }, domains: { $size: '$domains' } } },
+          {
+            $project: {
+              _id: 0,
+              events: 1,
+              duration: 1,
+              users: { $size: '$users' },
+              domains: { $size: '$domains' },
+            },
+          },
         ],
         today: [
           { $match: { timestamp: { $gte: today } } },
-          { $group: { _id: null, events: { $sum: 1 }, duration: { $sum: { $ifNull: ['$durationMs', 0] } } } },
+          {
+            $group: {
+              _id: null,
+              events: { $sum: 1 },
+              duration: { $sum: { $ifNull: ['$durationMs', 0] } },
+            },
+          },
           { $project: { _id: 0, events: 1, duration: 1 } },
         ],
         week: [
           { $match: { timestamp: { $gte: thisWeek } } },
-          { $group: { _id: null, events: { $sum: 1 }, duration: { $sum: { $ifNull: ['$durationMs', 0] } } } },
+          {
+            $group: {
+              _id: null,
+              events: { $sum: 1 },
+              duration: { $sum: { $ifNull: ['$durationMs', 0] } },
+            },
+          },
           { $project: { _id: 0, events: 1, duration: 1 } },
         ],
         month: [
           { $match: { timestamp: { $gte: thisMonth } } },
-          { $group: { _id: null, events: { $sum: 1 }, duration: { $sum: { $ifNull: ['$durationMs', 0] } } } },
+          {
+            $group: {
+              _id: null,
+              events: { $sum: 1 },
+              duration: { $sum: { $ifNull: ['$durationMs', 0] } },
+            },
+          },
           { $project: { _id: 0, events: 1, duration: 1 } },
         ],
       },
     },
   ]);
 
-  const total = result.total[0] || { events: 0, users: 0, domains: 0, duration: 0 };
+  const total = result.total[0] || {
+    events: 0,
+    users: 0,
+    domains: 0,
+    duration: 0,
+  };
   const todayS = result.today[0] || { events: 0, duration: 0 };
   const weekS = result.week[0] || { events: 0, duration: 0 };
   const monthS = result.month[0] || { events: 0, duration: 0 };
@@ -324,8 +526,20 @@ export async function analyticsSummary(_req: Request, res: Response) {
     ScreenshotModel.estimatedDocumentCount(),
   ]);
   // include legacy-compatible totals with screenshots for UI
-  const totals = { events: total.events || 0, users: total.users || 0, domains: total.domains || 0, screenshots };
-  return res.json({ total, totals, today: todayS, thisWeek: weekS, thisMonth: monthS, registeredUsers });
+  const totals = {
+    events: total.events || 0,
+    users: total.users || 0,
+    domains: total.domains || 0,
+    screenshots,
+  };
+  return res.json({
+    total,
+    totals,
+    today: todayS,
+    thisWeek: weekS,
+    thisMonth: monthS,
+    registeredUsers,
+  });
 }
 
 export async function analyticsTopDomains(req: Request, res: Response) {
@@ -349,21 +563,48 @@ export async function analyticsTopDomains(req: Request, res: Response) {
     visitCount: d.visitCount as number,
     lastVisit: d.lastVisit as Date,
     totalTimeMinutes: Math.round((d.totalTime as number) / 60000),
-    averageTimeMinutes: Math.round(((d.totalTime as number) / Math.max(1, d.visitCount as number)) / 60000),
+    averageTimeMinutes: Math.round(
+      (d.totalTime as number) / Math.max(1, d.visitCount as number) / 60000,
+    ),
   }));
-  return res.json({ domains, items: domains.map((d: any) => ({ domain: d.domain, count: d.visitCount })) });
+  return res.json({
+    domains,
+    items: domains.map((d: any) => ({ domain: d.domain, count: d.visitCount })),
+  });
 }
 
 export async function analyticsUsers(_req: Request, res: Response) {
   const agg = await EventModel.aggregate([
-    { $group: { _id: '$username', events: { $sum: 1 }, domains: { $addToSet: '$domain' }, totalTime: { $sum: { $ifNull: ['$durationMs', 0] } } } },
-    { $project: { username: '$_id', _id: 0, events: 1, totalTime: 1, domains: 1, domainsCount: { $size: { $setDifference: ['$domains', [null]] } } } },
+    {
+      $group: {
+        _id: '$username',
+        events: { $sum: 1 },
+        domains: { $addToSet: '$domain' },
+        totalTime: { $sum: { $ifNull: ['$durationMs', 0] } },
+      },
+    },
+    {
+      $project: {
+        username: '$_id',
+        _id: 0,
+        events: 1,
+        totalTime: 1,
+        domains: 1,
+        domainsCount: { $size: { $setDifference: ['$domains', [null]] } },
+      },
+    },
     { $sort: { events: -1 } },
   ]);
   const usernames = agg.map((u: any) => u.username).filter(Boolean) as string[];
   const [userDocs, profileDocs] = await Promise.all([
-    UserModel.find({ username: { $in: usernames } }, { username: 1, displayName: 1 }).lean(),
-    UserProfileModel.find({ username: { $in: usernames } }, { username: 1, displayName: 1 }).lean(),
+    UserModel.find(
+      { username: { $in: usernames } },
+      { username: 1, displayName: 1 },
+    ).lean(),
+    UserProfileModel.find(
+      { username: { $in: usernames } },
+      { username: 1, displayName: 1 },
+    ).lean(),
   ]);
   const usernameToDisplayName = new Map<string, string>();
   userDocs.forEach((u: any) => {
@@ -380,9 +621,9 @@ export async function analyticsUsers(_req: Request, res: Response) {
   const users = agg.map((u: any) => ({
     ...u,
     displayName: usernameToDisplayName.get(u.username as string),
-    avgTime: u.events ? Math.round((u.totalTime as number) / (u.events as number)) : 0,
+    avgTime: u.events
+      ? Math.round((u.totalTime as number) / (u.events as number))
+      : 0,
   }));
   return res.json({ users, items: users });
 }
-
-

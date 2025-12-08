@@ -20,9 +20,10 @@ interface Props {
   loading?: boolean;
   onManageDepartments?(): void;
   usersOptions?: string[];
+  displayNames?: Record<string, string>;
 }
 
-export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, onRefresh, loading, onManageDepartments, usersOptions = [] }: Props): JSX.Element {
+export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, onRefresh, loading, onManageDepartments, usersOptions = [], displayNames = {} }: Props): JSX.Element {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loadingDepartments, setLoadingDepartments] = useState(false);
   const [domains, setDomains] = useState<string[]>([]);
@@ -108,9 +109,13 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
             value={value.user || ''} 
             onChange={(e) => handleFilterChange({ user: e.target.value || undefined })}>
             <option value="">All Users</option>
-            {usersOptions.map((u) => (
-              <option key={u} value={u}>{u}</option>
-            ))}
+            {usersOptions.map((u) => {
+              const displayName = displayNames[u];
+              const label = displayName && displayName !== u ? `${displayName} (${u})` : u;
+              return (
+                <option key={u} value={u}>{label}</option>
+              );
+            })}
           </select>
         ) : (
           <input 

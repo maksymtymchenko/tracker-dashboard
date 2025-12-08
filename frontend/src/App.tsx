@@ -295,6 +295,7 @@ function App(): JSX.Element {
               loading={activityLoading}
               onManageDepartments={() => setShowDepartments(true)}
               usersOptions={usersOptions}
+              displayNames={displayNames}
             />
             <div className="mt-4">
               <ActivityLog

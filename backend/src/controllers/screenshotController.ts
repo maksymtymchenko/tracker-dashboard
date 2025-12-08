@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { ScreenshotModel } from '../models/Screenshot.js';
 import { r2Storage } from '../utils/r2Storage.js';
 import { DepartmentModel, UserDepartmentModel } from '../models/Department.js';
+import { UserModel } from '../models/User.js';
+import { UserProfileModel } from '../models/UserProfile.js';
 
 const CollectSchema = z.object({
   screenshot: z.string(),
@@ -82,18 +84,82 @@ export async function listScreenshots(req: Request, res: Response) {
   const limit = Math.min(100, Math.max(1, q.limit));
 
   const filter: Record<string, unknown> = {};
-  if (q.username) filter.username = q.username;
-  else if (q.user) filter.username = q.user;
+  
+  // Handle user filter - check both username and displayName
+  if (q.username || q.user) {
+    const userFilter = (q.username || q.user) as string;
+    // First try using it as a username directly (most common case from dropdown)
+    // Also check if it matches a displayName (for manual input or search)
+    const [directUserMatch, displayNameMatch] = await Promise.all([
+      UserModel.findOne({ username: userFilter }, { username: 1 }).lean(),
+      UserModel.findOne({ displayName: userFilter }, { username: 1 }).lean(),
+    ]);
+    
+    if (directUserMatch) {
+      // It's a username, use it directly
+      filter.username = userFilter;
+    } else if (displayNameMatch) {
+      // It's a displayName, use the corresponding username
+      filter.username = displayNameMatch.username;
+    } else {
+      // Try case-insensitive partial match on displayName
+      const displayNameRegex = new RegExp(userFilter, 'i');
+      const [displayNameMatches, profileMatches] = await Promise.all([
+        UserModel.find(
+          { displayName: displayNameRegex },
+          { username: 1 },
+        ).lean(),
+        UserProfileModel.find(
+          { displayName: displayNameRegex },
+          { username: 1 },
+        ).lean(),
+      ]);
+      
+      const allMatches = [...displayNameMatches, ...profileMatches];
+      if (allMatches.length > 0) {
+        const usernames = Array.from(
+          new Set(allMatches.map((u: any) => u.username).filter(Boolean)),
+        );
+        if (usernames.length > 0) {
+          filter.username =
+            usernames.length === 1 ? usernames[0] : { $in: usernames };
+        } else {
+          // No match found, but still try using it as username (user might not be in UserModel)
+          filter.username = userFilter;
+        }
+      } else {
+        // No displayName match found, use it as username directly
+        // (user might exist in events but not in UserModel)
+        filter.username = userFilter;
+      }
+    }
+  }
+  
   if (q.domain) filter.domain = q.domain;
 
-  // Text search across username and domain
+  // Text search across username, domain, filename, and displayName
   if (q.search && q.search.trim()) {
     const regex = new RegExp(q.search.trim(), 'i');
-    filter.$or = [
+    // Find usernames that match the search in their displayName
+    const displayNameMatches = await UserModel.find({ displayName: regex }, { username: 1 }).lean();
+    const profileDisplayNameMatches = await UserProfileModel.find({ displayName: regex }, { username: 1 }).lean();
+    const matchingUsernames = [
+      ...displayNameMatches.map((u: any) => u.username),
+      ...profileDisplayNameMatches.map((p: any) => p.username),
+    ].filter(Boolean);
+    
+    const searchConditions: any[] = [
       { username: regex },
       { domain: regex },
       { filename: regex },
     ];
+    
+    // Add username matches from displayName search
+    if (matchingUsernames.length > 0) {
+      searchConditions.push({ username: { $in: matchingUsernames } });
+    }
+    
+    filter.$or = searchConditions;
   }
 
   // Handle department filtering

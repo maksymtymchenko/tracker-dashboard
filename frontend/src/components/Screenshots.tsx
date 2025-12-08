@@ -308,11 +308,15 @@ export function Screenshots({
               onChange={(e) => onUserFilterChange && onUserFilterChange(e.target.value)}
             >
               <option value="">All Users</option>
-              {usersOptions.map((u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ))}
+              {usersOptions.map((u) => {
+                const displayName = displayNames?.[u];
+                const label = displayName && displayName !== u ? `${displayName} (${u})` : u;
+                return (
+                  <option key={u} value={u}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           )}
 
@@ -759,11 +763,15 @@ export function Screenshots({
                   onChange={(e) => onUserFilterChange && onUserFilterChange(e.target.value)}
                 >
                   <option value="">All Users</option>
-                  {usersOptions.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
+                  {usersOptions.map((u) => {
+                    const displayName = displayNames?.[u];
+                    const label = displayName && displayName !== u ? `${displayName} (${u})` : u;
+                    return (
+                      <option key={u} value={u}>
+                        {label}
+                      </option>
+                    );
+                  })}
                 </select>
               )}
             </div>

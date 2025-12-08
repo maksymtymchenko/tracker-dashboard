@@ -68,15 +68,26 @@ export async function fetchActivity(
 }
 
 export async function fetchScreenshots(
-  params: Partial<{ page: number; limit: number; user: string }>,
+  params: Partial<{
+    page: number;
+    limit: number;
+    user: string;
+    username: string;
+    department: string;
+    domain: string;
+    timeRange: 'all' | 'today' | 'week' | 'month';
+    search: string;
+  }>,
 ) {
+  const query = { ...params } as any;
+  if (params?.user && !params?.username) query.username = params.user; // prefer username param on backend
   const { data } = await api.get<{
     items: ScreenshotItem[];
     files?: ScreenshotItem[];
     total: number;
     page: number;
     limit: number;
-  }>('/api/screenshots', { params });
+  }>('/api/screenshots', { params: query });
   // Use files array if available (has signed URLs), otherwise use items
   if (data.files && data.files.length > 0) {
     return { ...data, items: data.files };

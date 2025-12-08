@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { ScreenshotModel } from '../models/Screenshot.js';
 import { r2Storage } from '../utils/r2Storage.js';
+import { DepartmentModel, UserDepartmentModel } from '../models/Department.js';
 
 const CollectSchema = z.object({
   screenshot: z.string(),
@@ -65,15 +66,84 @@ export async function collectScreenshot(req: Request, res: Response) {
 }
 
 export async function listScreenshots(req: Request, res: Response) {
-  const page = Number(req.query.page || 1);
-  const limit = Math.min(100, Number(req.query.limit || 20));
-  const user = req.query.user as string | undefined;
+  const querySchema = z.object({
+    user: z.string().optional(),
+    username: z.string().optional(),
+    department: z.string().optional(),
+    domain: z.string().optional(),
+    page: z.coerce.number().default(1),
+    limit: z.coerce.number().default(20),
+    timeRange: z.enum(['all', 'today', 'week', 'month']).optional(),
+    search: z.string().optional(),
+  });
+  const q = querySchema.parse(req.query);
+
+  const page = Math.max(1, q.page);
+  const limit = Math.min(100, Math.max(1, q.limit));
 
   const filter: Record<string, unknown> = {};
-  if (user) filter.username = user;
+  if (q.username) filter.username = q.username;
+  else if (q.user) filter.username = q.user;
+  if (q.domain) filter.domain = q.domain;
 
+  // Text search across username and domain
+  if (q.search && q.search.trim()) {
+    const regex = new RegExp(q.search.trim(), 'i');
+    filter.$or = [
+      { username: regex },
+      { domain: regex },
+      { filename: regex },
+    ];
+  }
+
+  // Handle department filtering
+  if (q.department) {
+    const department = await DepartmentModel.findOne({ name: q.department }).lean();
+    if (department) {
+      const userDepts = await UserDepartmentModel.find({ departmentId: (department as any)._id }).lean();
+      const departmentUsernames = Array.from(new Set(userDepts.map((ud) => ud.username))).filter(Boolean) as string[];
+      if (departmentUsernames.length > 0) {
+        // If username filter is already set, intersect with department users
+        if (filter.username) {
+          if (!departmentUsernames.includes(filter.username as string)) {
+            // User is not in this department, return empty results
+            return res.json({ items: [], total: 0, page, limit, count: 0, files: [] });
+          }
+        } else {
+          // Filter by all users in this department
+          filter.username = { $in: departmentUsernames };
+        }
+      } else {
+        // No users in this department, return empty results
+        return res.json({ items: [], total: 0, page, limit, count: 0, files: [] });
+      }
+    } else {
+      // Department not found, return empty results
+      return res.json({ items: [], total: 0, page, limit, count: 0, files: [] });
+    }
+  }
+
+  // Handle time range filtering
+  const now = new Date();
+  if (q.timeRange && q.timeRange !== 'all') {
+    const start = new Date();
+    if (q.timeRange === 'today') {
+      start.setHours(0, 0, 0, 0);
+    } else if (q.timeRange === 'week') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      start.setDate(diff);
+      start.setHours(0, 0, 0, 0);
+    } else if (q.timeRange === 'month') {
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+    }
+    filter.mtime = { $gte: start };
+  }
+
+  const skip = (page - 1) * limit;
   const [items, total] = await Promise.all([
-    ScreenshotModel.find(filter).sort({ mtime: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+    ScreenshotModel.find(filter).sort({ mtime: -1 }).skip(skip).limit(limit).lean(),
     ScreenshotModel.countDocuments(filter),
   ]);
 

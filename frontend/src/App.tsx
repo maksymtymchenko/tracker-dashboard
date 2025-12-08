@@ -111,7 +111,17 @@ function App(): JSX.Element {
     setShotsError(undefined);
     setShotsLoading(true);
     try {
-      const res = await fetchScreenshots({ page: shotsPage, limit: shotsLimit, user: shotsUser || undefined });
+      // Use filter user if set, otherwise fall back to shotsUser (for backward compatibility)
+      const userFilter = filters.user || shotsUser || undefined;
+      const res = await fetchScreenshots({
+        page: shotsPage,
+        limit: shotsLimit,
+        user: userFilter,
+        department: filters.department || undefined,
+        domain: filters.domain || undefined,
+        timeRange: (filters.timeRange as any) || 'all',
+        search: filters.search || undefined,
+      });
       setShots(res.items);
       setShotsTotal((res as any).total ?? (res as any).count ?? 0);
     } catch (e: unknown) {
@@ -119,7 +129,7 @@ function App(): JSX.Element {
     } finally {
       setShotsLoading(false);
     }
-  }, [shotsPage, shotsLimit, shotsUser]);
+  }, [shotsPage, shotsLimit, shotsUser, filters]);
 
   // Reset activity page to 1 when filters change
   useEffect(() => {
@@ -127,6 +137,13 @@ function App(): JSX.Element {
       setActivityPage(1);
     }
   }, [user, filters.search, filters.user, filters.department, filters.domain, filters.timeRange, filters.type]);
+
+  // Reset screenshots page to 1 when filters change
+  useEffect(() => {
+    if (user) {
+      setShotsPage(1);
+    }
+  }, [user, filters.search, filters.user, filters.department, filters.domain, filters.timeRange]);
 
   // Load initial data when user logs in
   useEffect(() => {
@@ -305,8 +322,13 @@ function App(): JSX.Element {
             total={shotsTotal}
             onPageChange={(p) => setShotsPage(p)}
             usersOptions={usersOptions}
-            userFilter={shotsUser}
-            onUserFilterChange={(u) => { setShotsPage(1); setShotsUser(u); }}
+            userFilter={filters.user || shotsUser}
+            onUserFilterChange={(u) => {
+              setShotsPage(1);
+              setShotsUser(u);
+              // Sync with ActivityFilters
+              setFilters({ ...filters, user: u || undefined });
+            }}
             userRole={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'}
             searchQuery={filters.search}
             displayNames={displayNames}

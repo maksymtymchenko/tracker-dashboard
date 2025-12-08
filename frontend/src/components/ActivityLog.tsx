@@ -35,7 +35,7 @@ export function ActivityLog({
   const searchQuery = externalSearchQuery || localSearchQuery;
   const [screenshotOpen, setScreenshotOpen] = useState<string | null>(null);
   const [screenshotItems, setScreenshotItems] = useState<Array<{ filename: string; url?: string; username: string; domain?: string; mtime?: number }>>([]);
-  const [loadingScreenshot, setLoadingScreenshot] = useState(false);
+  const [loadingScreenshot, setLoadingScreenshot] = useState<string | null>(null);
 
   const formatDuration = (ms: number): string => {
     if (!Number.isFinite(ms) || ms < 0) return String(ms);
@@ -370,15 +370,22 @@ export function ActivityLog({
   };
 
   /**
+   * Get unique identifier for an activity item
+   */
+  const getActivityItemId = (item: ActivityItem): string => {
+    return `${item._id}_${item.time}`;
+  };
+
+  /**
    * Find screenshot by matching username and time
    * Returns the screenshot item and all screenshots for navigation
    */
-  const findScreenshotByTime = async (event: ActivityItem): Promise<{
+  const findScreenshotByTime = async (event: ActivityItem, itemId: string): Promise<{
     screenshot: { filename: string; url?: string; username: string; domain?: string; mtime?: number } | null;
     allScreenshots: Array<{ filename: string; url?: string; username: string; domain?: string; mtime?: number }>;
   }> => {
     try {
-      setLoadingScreenshot(true);
+      setLoadingScreenshot(itemId);
       const eventTime = new Date(event.time).getTime();
       // Search within a 30 minute window (more lenient)
       const timeWindow = 30 * 60 * 1000;
@@ -456,7 +463,7 @@ export function ActivityLog({
       console.error('Failed to find screenshot:', error);
       return { screenshot: null, allScreenshots: [] };
     } finally {
-      setLoadingScreenshot(false);
+      setLoadingScreenshot(null);
     }
   };
 
@@ -475,12 +482,13 @@ export function ActivityLog({
    * Handle viewing screenshot for a screenshot event
    */
   const handleViewScreenshot = async (event: ActivityItem) => {
+    const itemId = getActivityItemId(event);
     // First try to get screenshot info from event details
     const screenshotInfo = getScreenshotInfo(event);
     if (screenshotInfo && screenshotInfo.filename) {
       // If we have a filename, fetch all screenshots for navigation and find this one
       try {
-        setLoadingScreenshot(true);
+        setLoadingScreenshot(itemId);
         const result = await fetchScreenshots({
           user: event.username,
           limit: 100,
@@ -495,12 +503,12 @@ export function ActivityLog({
       } catch (error) {
         console.error('Failed to fetch screenshots:', error);
       } finally {
-        setLoadingScreenshot(false);
+        setLoadingScreenshot(null);
       }
     }
 
     // If not found in details, try to find by username and time
-    const { screenshot, allScreenshots } = await findScreenshotByTime(event);
+    const { screenshot, allScreenshots } = await findScreenshotByTime(event, itemId);
     if (screenshot) {
       setScreenshotItems(allScreenshots);
       setScreenshotOpen(screenshot.filename);
@@ -714,9 +722,9 @@ export function ActivityLog({
                         <button
                           className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                           onClick={() => handleViewClick(row)}
-                          disabled={row.type === 'screenshot' && loadingScreenshot}
+                          disabled={row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row)}
                         >
-                          {row.type === 'screenshot' && loadingScreenshot ? 'Loading…' : 'View'}
+                          {row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row) ? 'Loading…' : 'View'}
                         </button>
                       </td>
                     </tr>
@@ -811,9 +819,9 @@ export function ActivityLog({
                   <button
                     className="mt-3 w-full text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                     onClick={() => handleViewClick(row)}
-                    disabled={row.type === 'screenshot' && loadingScreenshot}
+                    disabled={row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row)}
                   >
-                    {row.type === 'screenshot' && loadingScreenshot ? 'Loading…' : row.type === 'screenshot' ? 'View Screenshot' : 'View Details'}
+                    {row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row) ? 'Loading…' : row.type === 'screenshot' ? 'View Screenshot' : 'View Details'}
                   </button>
                 </div>
               ))
@@ -905,9 +913,9 @@ export function ActivityLog({
                         <button
                           className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                           onClick={() => handleViewClick(row)}
-                          disabled={row.type === 'screenshot' && loadingScreenshot}
+                          disabled={row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row)}
                         >
-                          {row.type === 'screenshot' && loadingScreenshot ? 'Loading…' : row.type === 'screenshot' ? 'View Screenshot' : 'View Details'}
+                          {row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row) ? 'Loading…' : row.type === 'screenshot' ? 'View Screenshot' : 'View Details'}
                         </button>
                       </div>
                     </div>
@@ -1090,10 +1098,10 @@ export function ActivityLog({
                 <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
                   <button
                     onClick={() => handleViewScreenshot(open)}
-                    disabled={loadingScreenshot}
+                    disabled={loadingScreenshot === getActivityItemId(open)}
                     className="w-full px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-medium transition-colors flex items-center justify-center gap-2"
                   >
-                    {loadingScreenshot ? (
+                    {loadingScreenshot === getActivityItemId(open) ? (
                       <>
                         <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

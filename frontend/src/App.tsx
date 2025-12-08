@@ -44,6 +44,7 @@ function App(): JSX.Element {
   const [deptAnalyticsError, setDeptAnalyticsError] = useState<string | undefined>();
   const [filters, setFilters] = useState<ActivityFilterState>({ timeRange: 'all' });
   const [showDepartments, setShowDepartments] = useState(false);
+  const [showUsers, setShowUsers] = useState(false);
   const [usersOptions, setUsersOptions] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<{ id: string; name: string } | null>(null);
@@ -254,6 +255,7 @@ function App(): JSX.Element {
           onToggleDark={() => setDark((v) => !v)} 
           onLogout={handleLogout}
           onManageDepartments={() => setShowDepartments(true)}
+          onManageUsers={(user?.role === 'ADMIN' || user?.role === 'admin') ? () => setShowUsers(true) : undefined}
         />
 
         <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -341,9 +343,9 @@ function App(): JSX.Element {
             displayNames={displayNames}
           />
 
-          {(user?.role === 'ADMIN' || user?.role === 'admin') && <AdminUsers canManage={true} />}
         </main>
         <DepartmentsModal open={showDepartments} onClose={() => setShowDepartments(false)} />
+        <AdminUsers open={showUsers} onClose={() => setShowUsers(false)} canManage={user?.role === 'ADMIN' || user?.role === 'admin'} />
         <DepartmentUsersModal
           departmentId={selectedDepartment?.id || null}
           departmentName={selectedDepartment?.name || null}

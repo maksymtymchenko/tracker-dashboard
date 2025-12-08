@@ -3,10 +3,12 @@ import { BasicUser } from 'src/types';
 import { listUsers, listDistinctUsers, deleteUserById, adminDeleteUserAllData, updateUser, setUserDisplayNameByUsername, fetchUsersAnalytics } from 'src/api/client';
 
 interface Props {
+  open: boolean;
+  onClose(): void;
   canManage: boolean;
 }
 
-export function AdminUsers({ canManage }: Props): JSX.Element | null {
+export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | null {
   const [users, setUsers] = useState<BasicUser[]>([]);
   const [usernames, setUsernames] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -42,8 +44,10 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
   };
 
   useEffect(() => {
-    load();
-  }, [canManage]);
+    if (open && canManage) {
+      load();
+    }
+  }, [open, canManage]);
 
   const pageItems = useMemo(() => {
     const list = usernames.length ? usernames : users.map((u) => u.username);
@@ -51,19 +55,25 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
     return list.slice(start, start + limit);
   }, [users, usernames, page, limit]);
 
-  if (!canManage) return null;
+  if (!open || !canManage) return null;
 
   return (
-    <section className="p-4 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800">
-      <div className="flex items-center justify-between mb-3">
-        <div className="font-medium">Manage Users</div>
-        <div className="flex items-center gap-2">
-          <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={load} disabled={loading}>
-            {loading ? 'Loading…' : 'Refresh'}
-          </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-5xl max-h-[80vh] overflow-hidden overflow-y-auto bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl">
+        <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+          <div className="font-semibold">Manage Users</div>
+          <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700" onClick={onClose}>Close</button>
         </div>
-      </div>
-      {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
+        <div className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={load} disabled={loading}>
+                {loading ? 'Loading…' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+          {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
       <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400">
@@ -184,8 +194,10 @@ export function AdminUsers({ canManage }: Props): JSX.Element | null {
             </button>
           </div>
         </div>
+        </div>
+        </div>
       </div>
-    </section>
+    </div>
   );
 }
 

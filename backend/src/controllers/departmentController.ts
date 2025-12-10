@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { DepartmentModel, UserDepartmentModel } from '../models/Department.js';
 import { EventModel } from '../models/Event.js';
+import { ScreenshotModel } from '../models/Screenshot.js';
+import { UserModel } from '../models/User.js';
+import { UserProfileModel } from '../models/UserProfile.js';
 
 export async function listDepartments(_req: Request, res: Response) {
   const items = await DepartmentModel.find().lean();
@@ -234,6 +237,190 @@ export async function importDepartments(req: Request, res: Response) {
   const toInsert = parsed.data.data.map((d) => ({ name: d.name, color: d.color, description: d.description }));
   const result = await DepartmentModel.insertMany(toInsert, { ordered: false });
   return res.json({ success: true, count: result.length });
+}
+
+/**
+ * Get user analytics for a specific department
+ * Returns users with their metrics: events, duration, websites, apps, screenshots, domains
+ */
+export async function departmentUsersAnalytics(req: Request, res: Response) {
+  const { id } = req.params;
+  
+  // Get users in this department
+  const userDepts = await UserDepartmentModel.find({ departmentId: id }).lean();
+  const usernames = userDepts.map((ud) => ud.username);
+  
+  if (usernames.length === 0) {
+    return res.json({ users: [] });
+  }
+
+  // Helper to extract application from event data
+  const extractApplication = (data: unknown): string | undefined => {
+    if (!data || typeof data !== 'object') return undefined;
+    const d = data as Record<string, unknown>;
+    // Try common field names for application
+    return (
+      (typeof d.application === 'string' ? d.application : undefined) ||
+      (typeof d.app === 'string' ? d.app : undefined) ||
+      (typeof d.appName === 'string' ? d.appName : undefined) ||
+      (typeof d.app_name === 'string' ? d.app_name : undefined) ||
+      // Sometimes title contains app name (e.g., "Chrome - Example.com")
+      (typeof d.title === 'string' && d.title.includes(' - ')
+        ? d.title.split(' - ')[0]
+        : undefined)
+    );
+  };
+
+  // Aggregate events by username with basic metrics
+  const eventsByUser = await EventModel.aggregate([
+    { $match: { username: { $in: usernames } } },
+    {
+      $group: {
+        _id: '$username',
+        events: { $sum: 1 },
+        duration: { $sum: { $ifNull: ['$durationMs', 0] } },
+        uniqueDomains: { $addToSet: '$domain' },
+      },
+    },
+    {
+      $project: {
+        username: '$_id',
+        _id: 0,
+        events: 1,
+        duration: 1,
+        uniqueDomains: { $size: { $setDifference: ['$uniqueDomains', [null, '']] } },
+      },
+    },
+  ]);
+
+  // Get unique applications and websites from events (simpler approach)
+  const eventsWithApps = await EventModel.find(
+    { username: { $in: usernames } },
+    { username: 1, domain: 1, data: 1 },
+  ).lean();
+
+  // Helper to extract URL from event data
+  const extractUrl = (data: unknown): string | undefined => {
+    if (!data || typeof data !== 'object') return undefined;
+    const d = data as Record<string, unknown>;
+    if (typeof d.url === 'string') return d.url;
+    return undefined;
+  };
+
+  // Process events to extract apps and websites
+  const userApps = new Map<string, Set<string>>();
+  const userWebsites = new Map<string, Set<string>>();
+  
+  eventsWithApps.forEach((e: any) => {
+    const username = e.username;
+    if (!username) return;
+
+    // Extract application
+    const app = extractApplication(e.data);
+    if (app) {
+      if (!userApps.has(username)) userApps.set(username, new Set());
+      userApps.get(username)!.add(app);
+    }
+
+    // Extract website/domain
+    if (e.domain) {
+      if (!userWebsites.has(username)) userWebsites.set(username, new Set());
+      userWebsites.get(username)!.add(e.domain);
+    }
+    // Also check for URL in data
+    const url = extractUrl(e.data);
+    if (url) {
+      try {
+        const urlObj = new URL(url);
+        const domain = urlObj.hostname;
+        if (!userWebsites.has(username)) userWebsites.set(username, new Set());
+        userWebsites.get(username)!.add(domain);
+      } catch {
+        // Invalid URL, skip
+      }
+    }
+  });
+
+  // Count screenshots per user
+  const screenshotCounts = await ScreenshotModel.aggregate([
+    { $match: { username: { $in: usernames } } },
+    {
+      $group: {
+        _id: '$username',
+        screenshots: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const screenshotMap = new Map<string, number>();
+  screenshotCounts.forEach((item: any) => {
+    screenshotMap.set(item._id, item.screenshots || 0);
+  });
+
+  // Get display names
+  const [userDocs, profileDocs] = await Promise.all([
+    UserModel.find(
+      { username: { $in: usernames } },
+      { username: 1, displayName: 1 },
+    ).lean(),
+    UserProfileModel.find(
+      { username: { $in: usernames } },
+      { username: 1, displayName: 1 },
+    ).lean(),
+  ]);
+
+  const usernameToDisplayName = new Map<string, string>();
+  userDocs.forEach((u: any) => {
+    if (u.username && u.displayName) {
+      usernameToDisplayName.set(u.username, u.displayName);
+    }
+  });
+  profileDocs.forEach((p: any) => {
+    if (p.username && p.displayName && !usernameToDisplayName.has(p.username)) {
+      usernameToDisplayName.set(p.username, p.displayName);
+    }
+  });
+
+  // Combine all data
+  const users = eventsByUser.map((u: any) => {
+    const username = u.username;
+    const apps = userApps.get(username) || new Set();
+    const websites = userWebsites.get(username) || new Set();
+    
+    return {
+      username,
+      displayName: usernameToDisplayName.get(username),
+      events: u.events || 0,
+      duration: u.duration || 0,
+      domains: u.uniqueDomains || 0,
+      websites: websites.size,
+      apps: apps.size,
+      screenshots: screenshotMap.get(username) || 0,
+    };
+  });
+
+  // Also include users with no events but in the department
+  const usersWithEvents = new Set(users.map((u) => u.username));
+  usernames.forEach((username) => {
+    if (!usersWithEvents.has(username)) {
+      const displayName = usernameToDisplayName.get(username);
+      users.push({
+        username,
+        displayName,
+        events: 0,
+        duration: 0,
+        domains: 0,
+        websites: 0,
+        apps: 0,
+        screenshots: screenshotMap.get(username) || 0,
+      });
+    }
+  });
+
+  // Sort by events descending
+  users.sort((a, b) => b.events - a.events);
+
+  return res.json({ users });
 }
 
 

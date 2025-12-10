@@ -43,6 +43,7 @@ import {
   searchDepartments,
   exportDepartments,
   importDepartments,
+  departmentUsersAnalytics,
 } from '../controllers/departmentController.js';
 import { exportCSV, exportJSON } from '../controllers/exportController.js';
 import { EventModel } from '../models/Event.js';
@@ -237,6 +238,8 @@ router.post(
 router.get('/api/departments/:id/stats', requireAdmin, departmentStats);
 
 router.get('/api/departments/analytics', requireAuth, allDepartmentsAnalytics);
+
+router.get('/api/departments/:id/users/analytics', requireAuth, departmentUsersAnalytics);
 
 router.get('/api/departments/search', requireAdmin, searchDepartments);
 

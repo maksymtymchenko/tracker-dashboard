@@ -144,6 +144,24 @@ export async function fetchDepartmentsAnalytics() {
   return data.departments;
 }
 
+export interface DepartmentUserAnalytics {
+  username: string;
+  displayName?: string;
+  events: number;
+  duration: number;
+  domains: number;
+  websites: number;
+  apps: number;
+  screenshots: number;
+}
+
+export async function fetchDepartmentUsersAnalytics(departmentId: string) {
+  const { data } = await api.get<{ users: DepartmentUserAnalytics[] }>(
+    `/api/departments/${departmentId}/users/analytics`,
+  );
+  return data.users;
+}
+
 export async function createDepartment(payload: Partial<Department>) {
   const { data } = await api.post<{ ok: true; id: string }>(
     '/api/departments',

@@ -13,6 +13,8 @@ interface Props {
   onPageChange?(page: number): void;
   onUserClick?(username: string): void;
   searchQuery?: string;
+  defaultSortByDuration?: boolean;
+  defaultSortByUser?: boolean;
 }
 
 export function ActivityLog({
@@ -22,11 +24,17 @@ export function ActivityLog({
   onPageChange,
   onUserClick,
   searchQuery: externalSearchQuery = '',
+  defaultSortByDuration = false,
+  defaultSortByUser = false,
 }: Props): JSX.Element {
   const [open, setOpen] = useState<ActivityItem | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
-  const [sortField, setSortField] = useState<SortField>('time');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortField, setSortField] = useState<SortField>(
+    defaultSortByDuration ? 'duration' : defaultSortByUser ? 'username' : 'time'
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    defaultSortByDuration ? 'desc' : defaultSortByUser ? 'asc' : 'desc'
+  );
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   
   // Use external search query if provided, otherwise use local one

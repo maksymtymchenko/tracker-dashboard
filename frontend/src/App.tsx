@@ -10,7 +10,7 @@ import { AdminUsers } from 'src/components/AdminUsers';
 import { DepartmentsModal } from 'src/components/DepartmentsModal';
 import { DepartmentAnalytics } from 'src/components/DepartmentAnalytics';
 import { UserDetailsModal } from 'src/components/UserDetailsModal';
-import { DepartmentUsersModal } from 'src/components/DepartmentUsersModal';
+import { DepartmentUserList } from 'src/components/DepartmentUserList';
 import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, fetchDepartmentsAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout } from 'src/api/client';
 import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, DepartmentAnalytics as DepartmentAnalyticsType } from 'src/types';
 
@@ -48,6 +48,11 @@ function App(): JSX.Element {
   const [usersOptions, setUsersOptions] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<{ id: string; name: string } | null>(null);
+  const [departmentMetric, setDepartmentMetric] = useState<'events' | 'duration' | 'users'>('events');
+  const [departmentActivity, setDepartmentActivity] = useState<Paginated<ActivityItem> | null>(null);
+  const [departmentActivityLoading, setDepartmentActivityLoading] = useState(false);
+  const [departmentActivityError, setDepartmentActivityError] = useState<string | undefined>();
+  const [departmentActivityPage, setDepartmentActivityPage] = useState(1);
 
   const displayNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -107,6 +112,32 @@ function App(): JSX.Element {
       setActivityLoading(false);
     }
   }, [activityPage, activityLimit, filters]);
+
+  const loadDepartmentActivity = useCallback(async () => {
+    if (!selectedDepartment) {
+      setDepartmentActivity(null);
+      return;
+    }
+    setDepartmentActivityError(undefined);
+    setDepartmentActivityLoading(true);
+    try {
+      setDepartmentActivity(
+        await fetchActivity({
+          page: departmentActivityPage,
+          limit: activityLimit,
+          timeRange: (filters.timeRange as any) || 'all',
+          department: selectedDepartment.name,
+          domain: filters.domain || undefined,
+          type: filters.type || undefined,
+          search: filters.search || undefined,
+        }),
+      );
+    } catch (e: unknown) {
+      setDepartmentActivityError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setDepartmentActivityLoading(false);
+    }
+  }, [departmentActivityPage, activityLimit, selectedDepartment, filters]);
 
   const loadScreenshots = useCallback(async () => {
     setShotsError(undefined);
@@ -207,6 +238,12 @@ function App(): JSX.Element {
     loadActivity();
   }, [user, loadActivity]);
 
+  // Load department activity when department is selected
+  useEffect(() => {
+    if (!user) return;
+    loadDepartmentActivity();
+  }, [user, loadDepartmentActivity]);
+
   // Load screenshots when page or user filter changes
   useEffect(() => {
     if (!user) return;
@@ -276,13 +313,27 @@ function App(): JSX.Element {
                 data={deptAnalytics} 
                 loading={deptAnalyticsLoading} 
                 error={deptAnalyticsError}
+                selectedMetric={departmentMetric}
+                onMetricChange={setDepartmentMetric}
+                selectedDepartment={selectedDepartment}
+                filters={filters}
                 onDepartmentClick={(departmentId, departmentName) => {
-                  // Show users from this department
-                  setSelectedDepartment({ id: departmentId, name: departmentName });
+                  // Show activities for this department
+                  if (departmentId && departmentName) {
+                    setSelectedDepartment({ id: departmentId, name: departmentName });
+                  } else {
+                    // Clear selection when empty strings are passed (Back button)
+                    setSelectedDepartment(null);
+                  }
+                }}
+                onUserClick={(username) => {
+                  setSelectedUser(username);
+                  setFilters({ ...filters, user: username });
                 }}
               />
             </section>
           )}
+
 
           <section>
             <DomainActivityChart 
@@ -346,12 +397,6 @@ function App(): JSX.Element {
         </main>
         <DepartmentsModal open={showDepartments} onClose={() => setShowDepartments(false)} />
         <AdminUsers open={showUsers} onClose={() => setShowUsers(false)} canManage={user?.role === 'ADMIN' || user?.role === 'admin'} />
-        <DepartmentUsersModal
-          departmentId={selectedDepartment?.id || null}
-          departmentName={selectedDepartment?.name || null}
-          onClose={() => setSelectedDepartment(null)}
-          onUserClick={(username) => setSelectedUser(username)}
-        />
         <UserDetailsModal username={selectedUser} onClose={() => setSelectedUser(null)} />
       </div>
     </div>

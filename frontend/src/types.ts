@@ -77,4 +77,15 @@ export interface DepartmentAnalytics {
   averageDuration: number;
 }
 
+export interface DepartmentUserAnalytics {
+  username: string;
+  displayName?: string;
+  events: number;
+  duration: number;
+  domains: number;
+  websites: number;
+  apps: number;
+  screenshots: number;
+}
+
 

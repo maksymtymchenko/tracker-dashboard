@@ -7,9 +7,10 @@ interface Props {
   loading: boolean;
   error?: string;
   onUserClick?(username: string): void;
+  departmentName?: string;
 }
 
-export function DomainActivityChart({ data, loading, error, onUserClick }: Props): JSX.Element {
+export function DomainActivityChart({ data, loading, error, onUserClick, departmentName }: Props): JSX.Element {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const handleClick = (data: any) => {
@@ -92,7 +93,14 @@ export function DomainActivityChart({ data, loading, error, onUserClick }: Props
 
   return (
     <div className="p-4 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800">
-      <div className="font-medium mb-2">User Activity</div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-medium">User Activity</div>
+        {departmentName && (
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Департамент: <span className="font-medium text-blue-600 dark:text-blue-400">{departmentName}</span>
+          </div>
+        )}
+      </div>
       {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
       <div className="h-72">
         {loading ? (

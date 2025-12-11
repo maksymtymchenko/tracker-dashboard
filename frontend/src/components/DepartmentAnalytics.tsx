@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
-import { DepartmentAnalytics as DepartmentAnalyticsType, Paginated, ActivityItem } from 'src/types';
-import { fetchActivity } from 'src/api/client';
+import { DepartmentAnalytics as DepartmentAnalyticsType, Paginated, ActivityItem, DepartmentUserAnalytics } from 'src/types';
+import { fetchActivity, fetchDepartmentUsersAnalytics } from 'src/api/client';
 import { ActivityLog } from './ActivityLog';
 
 interface Props {
@@ -49,6 +49,10 @@ export function DepartmentAnalytics({
   const [maxChartItems] = useState(15); // Limit departments shown in charts
   const [cardsPerPage] = useState(12); // Number of cards to show initially
   const [cardViewMode, setCardViewMode] = useState<'cards' | 'list'>('cards');
+  const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(new Set());
+  const [departmentUsers, setDepartmentUsers] = useState<Map<string, DepartmentUserAnalytics[]>>(new Map());
+  const [departmentUsersLoading, setDepartmentUsersLoading] = useState<Map<string, boolean>>(new Map());
+  const [departmentUsersError, setDepartmentUsersError] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     const handleResize = () => {
@@ -89,6 +93,52 @@ export function DepartmentAnalytics({
     loadDepartmentActivity();
   }, [selectedDepartment, departmentActivityPage, filters]);
 
+  // Load department users analytics when department is expanded and viewMode is 'users'
+  useEffect(() => {
+    const loadDepartmentUsers = async (departmentId: string) => {
+      // Check if already loading
+      if (departmentUsersLoading.get(departmentId)) {
+        return;
+      }
+
+      // Only load if not already loaded or if viewMode is 'users'
+      if (departmentUsers.has(departmentId) && viewMode === 'users') {
+        return; // Already loaded
+      }
+
+      setDepartmentUsersLoading((prev) => new Map(prev).set(departmentId, true));
+      setDepartmentUsersError((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(departmentId);
+        return newMap;
+      });
+
+      try {
+        const users = await fetchDepartmentUsersAnalytics(departmentId);
+        setDepartmentUsers((prev) => new Map(prev).set(departmentId, users));
+      } catch (e: unknown) {
+        setDepartmentUsersError((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(departmentId, e instanceof Error ? e.message : 'Failed to load');
+          return newMap;
+        });
+      } finally {
+        setDepartmentUsersLoading((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(departmentId, false);
+          return newMap;
+        });
+      }
+    };
+
+    // Load users for all expanded departments when viewMode is 'users'
+    if (viewMode === 'users') {
+      expandedDepartments.forEach((deptId) => {
+        loadDepartmentUsers(deptId);
+      });
+    }
+  }, [expandedDepartments, viewMode]);
+
   const formatDuration = (ms: number): string => {
     if (ms < 1000) return `${Math.round(ms)} ms`;
     const seconds = ms / 1000;
@@ -107,6 +157,30 @@ export function DepartmentAnalytics({
     const days = Math.floor(hours / 24);
     const remHours = Math.round(hours % 24);
     return `${days}d ${remHours}h`;
+  };
+
+  const formatDurationFromMs = (ms: number): string => {
+    if (ms < 1000) return `${Math.round(ms)} ms`;
+    const seconds = ms / 1000;
+    if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)} s`;
+    const minutes = Math.floor(seconds / 60);
+    const remSec = Math.round(seconds % 60);
+    if (minutes < 60) return `${minutes}m ${remSec}s`;
+    const hours = Math.floor(minutes / 60);
+    const remMin = minutes % 60;
+    return `${hours}h ${remMin}m`;
+  };
+
+  const toggleDepartmentExpansion = (departmentId: string) => {
+    setExpandedDepartments((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(departmentId)) {
+        newSet.delete(departmentId);
+      } else {
+        newSet.add(departmentId);
+      }
+      return newSet;
+    });
   };
 
   // Filter and sort data based on search and view mode
@@ -201,12 +275,27 @@ export function DepartmentAnalytics({
   return (
     <div className="p-3 sm:p-4 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <div className="font-medium text-base sm:text-lg">
-          Department Analytics
-          {filteredData.length !== data.length && (
-            <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
-              ({filteredData.length} of {data.length})
-            </span>
+        <div className="flex items-center gap-2">
+          <div className="font-medium text-base sm:text-lg">
+            Department Analytics
+            {filteredData.length !== data.length && (
+              <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
+                ({filteredData.length} of {data.length})
+              </span>
+            )}
+          </div>
+          {selectedDepartment && (
+            <button
+              onClick={() => {
+                if (onDepartmentClick) {
+                  onDepartmentClick('', '');
+                }
+              }}
+              className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+              title="Сбросить выбор департамента"
+            >
+              ✕ Сбросить
+            </button>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -315,8 +404,9 @@ export function DepartmentAnalytics({
                     >
                       {chartData.map((entry, index) => {
                         const isHovered = hoverIndex === index;
+                        const isSelected = selectedDepartment?.id === entry.id;
                         const fillColor = entry.color;
-                        const opacity = isHovered ? 1 : 0.88;
+                        const opacity = isHovered ? 1 : isSelected ? 1 : 0.88;
                         
                         return (
                           <Cell 
@@ -333,7 +423,7 @@ export function DepartmentAnalytics({
                             style={{
                               transition: 'opacity 0.2s ease, filter 0.2s ease',
                               cursor: onDepartmentClick ? 'pointer' : 'default',
-                              filter: isHovered ? 'brightness(1.08)' : 'none',
+                              filter: isHovered ? 'brightness(1.08)' : isSelected ? 'brightness(1.15) drop-shadow(0 0 8px rgba(59, 130, 246, 0.5))' : 'none',
                             }}
                           />
                         );
@@ -371,8 +461,11 @@ export function DepartmentAnalytics({
                     >
                       {pieData.map((entry, index) => {
                         const isHovered = pieHoverIndex === index;
-                        const scale = isHovered ? 1.04 : 1;
-                        const opacity = isHovered ? 1 : 0.92;
+                        // Find the department by name to check if it's selected
+                        const dept = filteredData.find((d) => d.name === entry.name);
+                        const isSelected = selectedDepartment?.id === dept?.id;
+                        const scale = isHovered ? 1.04 : isSelected ? 1.06 : 1;
+                        const opacity = isHovered ? 1 : isSelected ? 1 : 0.92;
                         
                         return (
                           <Cell 
@@ -395,7 +488,7 @@ export function DepartmentAnalytics({
                               transform: `scale(${scale})`,
                               transformOrigin: 'center',
                               cursor: onDepartmentClick ? 'pointer' : 'default',
-                              filter: isHovered ? 'brightness(1.12) drop-shadow(0 4px 8px rgba(0,0,0,0.15))' : 'none',
+                              filter: isHovered ? 'brightness(1.12) drop-shadow(0 4px 8px rgba(0,0,0,0.15))' : isSelected ? 'brightness(1.15) drop-shadow(0 0 12px rgba(59, 130, 246, 0.6))' : 'none',
                             }}
                           />
                         );
@@ -506,69 +599,42 @@ export function DepartmentAnalytics({
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {displayedCards.map((dept) => {
                   const deptColor = dept.color || '#3b82f6';
-                  return (
-                    <div
-                      key={dept.id}
-                      className={`p-2.5 sm:p-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 transition-all ${
-                        onDepartmentClick ? 'cursor-pointer hover:shadow-md' : ''
-                      }`}
-                      style={{ borderLeftColor: deptColor, borderLeftWidth: '4px' }}
-                      onClick={() => {
-                        if (onDepartmentClick) {
-                          onDepartmentClick(dept.id, dept.name);
-                        }
-                      }}
-                    >
-                      <div className="font-medium mb-1.5 text-sm" style={{ color: deptColor }}>
-                        {dept.name}
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <div className="text-gray-500 dark:text-gray-400 text-xs">Events</div>
-                          <div className="font-semibold text-sm">{dept.events.toLocaleString()}</div>
-                        </div>
-                        <div>
-                          <div className="text-gray-500 dark:text-gray-400 text-xs">Duration</div>
-                          <div className="font-semibold text-sm">{formatHours(dept.durationHours)}</div>
-                        </div>
-                        <div>
-                          <div className="text-gray-500 dark:text-gray-400 text-xs">Users</div>
-                          <div className="font-semibold text-sm">{dept.userCount}</div>
-                        </div>
-                        <div>
-                          <div className="text-gray-500 dark:text-gray-400 text-xs">Domains</div>
-                          <div className="font-semibold text-sm">{dept.uniqueDomains}</div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                  const isExpanded = expandedDepartments.has(dept.id);
+                  const isSelected = selectedDepartment?.id === dept.id;
+                  const usersData = departmentUsers.get(dept.id);
+                  const usersLoading = departmentUsersLoading.get(dept.id) || false;
+                  const usersError = departmentUsersError.get(dept.id);
 
-            {/* List View */}
-            {cardViewMode === 'list' && (
-              <div className="space-y-2">
-                {displayedCards.map((dept) => {
-                  const deptColor = dept.color || '#3b82f6';
                   return (
-                    <div
-                      key={dept.id}
-                      className={`flex items-center gap-4 p-2.5 sm:p-3 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors group ${
-                        onDepartmentClick ? 'cursor-pointer' : ''
-                      }`}
-                      style={{ borderLeftColor: deptColor, borderLeftWidth: '4px' }}
-                      onClick={() => {
-                        if (onDepartmentClick) {
-                          onDepartmentClick(dept.id, dept.name);
-                        }
-                      }}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm mb-1" style={{ color: deptColor }}>
-                          {dept.name}
+                    <div key={dept.id} className="space-y-2">
+                      <div
+                        className={`p-2.5 sm:p-3 rounded-lg border transition-all cursor-pointer hover:shadow-md ${
+                          isSelected
+                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
+                            : 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50'
+                        }`}
+                        style={{ borderLeftColor: deptColor, borderLeftWidth: '4px' }}
+                        onClick={() => {
+                          toggleDepartmentExpansion(dept.id);
+                          if (onDepartmentClick) {
+                            onDepartmentClick(dept.id, dept.name);
+                          }
+                        }}
+                      >
+                        <div className="flex items-start justify-between mb-1.5">
+                          <div className="font-medium text-sm" style={{ color: deptColor }}>
+                            {dept.name}
+                          </div>
+                          <svg
+                            className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div className="grid grid-cols-2 gap-2 text-xs">
                           <div>
                             <div className="text-gray-500 dark:text-gray-400 text-xs">Events</div>
                             <div className="font-semibold text-sm">{dept.events.toLocaleString()}</div>
@@ -586,12 +652,265 @@ export function DepartmentAnalytics({
                             <div className="font-semibold text-sm">{dept.uniqueDomains}</div>
                           </div>
                         </div>
-                        {dept.averageDuration > 0 && (
-                          <div className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                            Avg Duration: {formatDuration(dept.averageDuration)}
-                          </div>
-                        )}
                       </div>
+
+                      {/* Expanded Content */}
+                      {isExpanded && (
+                        <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/30">
+                          {viewMode === 'users' ? (
+                            <div>
+                              <div className="text-sm font-medium mb-3">Пользователи департамента</div>
+                              {usersLoading ? (
+                                <div className="text-sm text-gray-500 dark:text-gray-400">Загрузка...</div>
+                              ) : usersError ? (
+                                <div className="text-sm text-red-600 dark:text-red-400">{usersError}</div>
+                              ) : usersData && usersData.length > 0 ? (
+                                <div className="space-y-3">
+                                  {usersData.map((user) => (
+                                    <div
+                                      key={user.username}
+                                      className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                                    >
+                                      <div className="flex items-start justify-between mb-2">
+                                        <div>
+                                          <div className="font-medium text-sm">
+                                            {user.displayName || user.username}
+                                          </div>
+                                          {user.displayName && (
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                                              {user.username}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {onUserClick && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onUserClick(user.username);
+                                            }}
+                                            className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                                          >
+                                            Скриншоты
+                                          </button>
+                                        )}
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-3 text-xs mt-2">
+                                        <div>
+                                          <div className="text-gray-500 dark:text-gray-400">Время активности</div>
+                                          <div className="font-semibold text-sm">
+                                            {formatDurationFromMs(user.duration)}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <div className="text-gray-500 dark:text-gray-400">Сайты</div>
+                                          <div className="font-semibold text-sm">{user.domains}</div>
+                                        </div>
+                                        <div>
+                                          <div className="text-gray-500 dark:text-gray-400">События</div>
+                                          <div className="font-semibold text-sm">{user.events.toLocaleString()}</div>
+                                        </div>
+                                        <div>
+                                          <div className="text-gray-500 dark:text-gray-400">Скриншоты</div>
+                                          <div className="font-semibold text-sm">{user.screenshots}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-500 dark:text-gray-400">Нет данных о пользователях</div>
+                              )}
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="text-sm font-medium mb-3">
+                                {viewMode === 'events' ? 'События департамента' : 'Активность по длительности'}
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                                {viewMode === 'events'
+                                  ? 'Показываются все действия (события) по этому департаменту: кто на какие сайты заходил, кто какие приложения держал активными'
+                                  : 'Показывается активность, отсортированная по длительности'}
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onDepartmentClick) {
+                                    onDepartmentClick(dept.id, dept.name);
+                                  }
+                                }}
+                                className="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                              >
+                                Показать детали
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* List View */}
+            {cardViewMode === 'list' && (
+              <div className="space-y-2">
+                {displayedCards.map((dept) => {
+                  const deptColor = dept.color || '#3b82f6';
+                  const isExpanded = expandedDepartments.has(dept.id);
+                  const isSelected = selectedDepartment?.id === dept.id;
+                  const usersData = departmentUsers.get(dept.id);
+                  const usersLoading = departmentUsersLoading.get(dept.id) || false;
+                  const usersError = departmentUsersError.get(dept.id);
+
+                  return (
+                    <div key={dept.id}>
+                      <div
+                        className={`flex items-center gap-4 p-2.5 sm:p-3 rounded-lg border transition-colors group cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
+                            : 'border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900/50'
+                        }`}
+                        style={{ borderLeftColor: deptColor, borderLeftWidth: '4px' }}
+                        onClick={() => {
+                          toggleDepartmentExpansion(dept.id);
+                          if (onDepartmentClick) {
+                            onDepartmentClick(dept.id, dept.name);
+                          }
+                        }}
+                      >
+                        <div className="flex-shrink-0">
+                          <svg
+                            className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm mb-1" style={{ color: deptColor }}>
+                            {dept.name}
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                            <div>
+                              <div className="text-gray-500 dark:text-gray-400 text-xs">Events</div>
+                              <div className="font-semibold text-sm">{dept.events.toLocaleString()}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-500 dark:text-gray-400 text-xs">Duration</div>
+                              <div className="font-semibold text-sm">{formatHours(dept.durationHours)}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-500 dark:text-gray-400 text-xs">Users</div>
+                              <div className="font-semibold text-sm">{dept.userCount}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-500 dark:text-gray-400 text-xs">Domains</div>
+                              <div className="font-semibold text-sm">{dept.uniqueDomains}</div>
+                            </div>
+                          </div>
+                          {dept.averageDuration > 0 && (
+                            <div className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                              Avg Duration: {formatDuration(dept.averageDuration)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Expanded Content */}
+                      {isExpanded && (
+                        <div className="mt-2 ml-7 p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/30">
+                          {viewMode === 'users' ? (
+                            <div>
+                              <div className="text-sm font-medium mb-3">Пользователи департамента</div>
+                              {usersLoading ? (
+                                <div className="text-sm text-gray-500 dark:text-gray-400">Загрузка...</div>
+                              ) : usersError ? (
+                                <div className="text-sm text-red-600 dark:text-red-400">{usersError}</div>
+                              ) : usersData && usersData.length > 0 ? (
+                                <div className="space-y-3">
+                                  {usersData.map((user) => (
+                                    <div
+                                      key={user.username}
+                                      className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                                    >
+                                      <div className="flex items-start justify-between mb-2">
+                                        <div>
+                                          <div className="font-medium text-sm">
+                                            {user.displayName || user.username}
+                                          </div>
+                                          {user.displayName && (
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                                              {user.username}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {onUserClick && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onUserClick(user.username);
+                                            }}
+                                            className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                                          >
+                                            Скриншоты
+                                          </button>
+                                        )}
+                                      </div>
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mt-2">
+                                        <div>
+                                          <div className="text-gray-500 dark:text-gray-400">Время активности</div>
+                                          <div className="font-semibold text-sm">
+                                            {formatDurationFromMs(user.duration)}
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <div className="text-gray-500 dark:text-gray-400">Сайты</div>
+                                          <div className="font-semibold text-sm">{user.domains}</div>
+                                        </div>
+                                        <div>
+                                          <div className="text-gray-500 dark:text-gray-400">События</div>
+                                          <div className="font-semibold text-sm">{user.events.toLocaleString()}</div>
+                                        </div>
+                                        <div>
+                                          <div className="text-gray-500 dark:text-gray-400">Скриншоты</div>
+                                          <div className="font-semibold text-sm">{user.screenshots}</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-500 dark:text-gray-400">Нет данных о пользователях</div>
+                              )}
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="text-sm font-medium mb-3">
+                                {viewMode === 'events' ? 'События департамента' : 'Активность по длительности'}
+                              </div>
+                              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                                {viewMode === 'events'
+                                  ? 'Показываются все действия (события) по этому департаменту: кто на какие сайты заходил, кто какие приложения держал активными'
+                                  : 'Показывается активность, отсортированная по длительности'}
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onDepartmentClick) {
+                                    onDepartmentClick(dept.id, dept.name);
+                                  }
+                                }}
+                                className="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                              >
+                                Показать детали
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

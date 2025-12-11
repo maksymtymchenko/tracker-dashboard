@@ -11,7 +11,7 @@ import { DepartmentsModal } from 'src/components/DepartmentsModal';
 import { DepartmentAnalytics } from 'src/components/DepartmentAnalytics';
 import { UserDetailsModal } from 'src/components/UserDetailsModal';
 import { DepartmentUserList } from 'src/components/DepartmentUserList';
-import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, fetchDepartmentsAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout } from 'src/api/client';
+import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, fetchDepartmentsAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout, getUsersByDepartment } from 'src/api/client';
 import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, DepartmentAnalytics as DepartmentAnalyticsType } from 'src/types';
 
 function App(): JSX.Element {
@@ -53,6 +53,8 @@ function App(): JSX.Element {
   const [departmentActivityLoading, setDepartmentActivityLoading] = useState(false);
   const [departmentActivityError, setDepartmentActivityError] = useState<string | undefined>();
   const [departmentActivityPage, setDepartmentActivityPage] = useState(1);
+  const [departmentUsers, setDepartmentUsers] = useState<string[]>([]);
+  const [departmentUsersLoading, setDepartmentUsersLoading] = useState(false);
 
   const displayNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -244,6 +246,36 @@ function App(): JSX.Element {
     loadDepartmentActivity();
   }, [user, loadDepartmentActivity]);
 
+  // Load department users when department is selected
+  useEffect(() => {
+    const loadDeptUsers = async () => {
+      if (!selectedDepartment || !user) {
+        setDepartmentUsers([]);
+        return;
+      }
+      setDepartmentUsersLoading(true);
+      try {
+        const users = await getUsersByDepartment(selectedDepartment.id);
+        setDepartmentUsers(users);
+      } catch (e: unknown) {
+        console.error('Failed to load department users:', e);
+        setDepartmentUsers([]);
+      } finally {
+        setDepartmentUsersLoading(false);
+      }
+    };
+    loadDeptUsers();
+  }, [selectedDepartment, user]);
+
+  // Filter usersAgg by selected department
+  const filteredUsersAgg = useMemo(() => {
+    if (!selectedDepartment || departmentUsers.length === 0) {
+      return usersAgg;
+    }
+    const deptUsersSet = new Set(departmentUsers);
+    return usersAgg.filter((user) => deptUsersSet.has(user.username));
+  }, [usersAgg, departmentUsers, selectedDepartment]);
+
   // Load screenshots when page or user filter changes
   useEffect(() => {
     if (!user) return;
@@ -337,10 +369,24 @@ function App(): JSX.Element {
 
           <section>
             <DomainActivityChart 
-              data={usersAgg} 
-              loading={usersAggLoading} 
+              data={filteredUsersAgg} 
+              loading={usersAggLoading || departmentUsersLoading} 
               error={usersAggError}
-              onUserClick={(username) => setSelectedUser(username)}
+              departmentName={selectedDepartment?.name}
+              onUserClick={(username) => {
+                setSelectedUser(username);
+                setFilters({ ...filters, user: username });
+                // Scroll to Activity Log section
+                setTimeout(() => {
+                  const sections = document.querySelectorAll('section');
+                  sections.forEach((section) => {
+                    const heading = section.querySelector('.font-medium');
+                    if (heading && heading.textContent?.includes('Activity Log')) {
+                      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  });
+                }, 100);
+              }}
             />
           </section>
 

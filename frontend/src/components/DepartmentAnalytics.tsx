@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
-import { DepartmentAnalytics as DepartmentAnalyticsType, Paginated, ActivityItem, DepartmentUserAnalytics } from 'src/types';
-import { fetchActivity, fetchDepartmentUsersAnalytics } from 'src/api/client';
-import { ActivityLog } from './ActivityLog';
+import { DepartmentAnalytics as DepartmentAnalyticsType, DepartmentUserAnalytics } from 'src/types';
+import { fetchDepartmentUsersAnalytics } from 'src/api/client';
 
 interface Props {
   data: DepartmentAnalyticsType[];
@@ -40,10 +39,6 @@ export function DepartmentAnalytics({
     }
   };
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
-  const [departmentActivity, setDepartmentActivity] = useState<Paginated<ActivityItem> | null>(null);
-  const [departmentActivityLoading, setDepartmentActivityLoading] = useState(false);
-  const [departmentActivityError, setDepartmentActivityError] = useState<string | undefined>();
-  const [departmentActivityPage, setDepartmentActivityPage] = useState(1);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [pieHoverIndex, setPieHoverIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,37 +99,6 @@ export function DepartmentAnalytics({
 
     loadSelectedDepartmentUsers();
   }, [selectedDepartment]);
-
-  // Load department activity when department is selected
-  useEffect(() => {
-    if (!selectedDepartment) {
-      setDepartmentActivity(null);
-      return;
-    }
-
-    const loadDepartmentActivity = async () => {
-      setDepartmentActivityError(undefined);
-      setDepartmentActivityLoading(true);
-      try {
-        const activity = await fetchActivity({
-          page: departmentActivityPage,
-          limit: 20,
-          timeRange: filters.timeRange || 'all',
-          department: selectedDepartment.name,
-          domain: filters.domain || undefined,
-          type: filters.type || undefined,
-          search: filters.search || undefined,
-        });
-        setDepartmentActivity(activity);
-      } catch (e: unknown) {
-        setDepartmentActivityError(e instanceof Error ? e.message : 'Failed to load');
-      } finally {
-        setDepartmentActivityLoading(false);
-      }
-    };
-
-    loadDepartmentActivity();
-  }, [selectedDepartment, departmentActivityPage, filters]);
 
   // Load department users analytics when department is expanded and viewMode is 'users'
   useEffect(() => {
@@ -629,61 +593,68 @@ export function DepartmentAnalytics({
                     }
 
                     return (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {usersData.map((user) => (
-                          <div
-                            key={user.username}
-                            className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
-                          >
-                            <div className="mb-3">
-                              <div className="font-medium text-sm">
-                                {user.displayName ? `${user.displayName} / ${user.username}` : user.username}
-                              </div>
-                              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                {formatDurationFromMs(user.duration)}
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              {onUserScreenshotsClick && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onUserScreenshotsClick(user.username);
-                                  }}
-                                  className="flex-1 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                                >
-                                  Screenshots
-                                </button>
-                              )}
-                              {onUserClick && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onUserClick(user.username);
-                                  }}
-                                  className="flex-1 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                                >
-                                  Details
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                      <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
+                            <tr>
+                              <th className="py-3 px-4">User</th>
+                              <th className="py-3 px-4">Duration</th>
+                              <th className="py-3 px-4">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {usersData.map((user) => (
+                              <tr
+                                key={user.username}
+                                className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/70 dark:hover:bg-gray-900/60 transition-colors"
+                              >
+                                <td className="py-3 px-4">
+                                  <div className="font-medium">
+                                    {user.displayName || user.username}
+                                  </div>
+                                  {user.displayName && (
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                                      {user.username}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className="text-sm">{formatDurationFromMs(user.duration)}</span>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex gap-2">
+                                    {onUserScreenshotsClick && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onUserScreenshotsClick(user.username);
+                                        }}
+                                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                                      >
+                                        Screenshots
+                                      </button>
+                                    )}
+                                    {onUserClick && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onUserClick(user.username);
+                                        }}
+                                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                                      >
+                                        Details
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     );
                   })()}
                 </div>
-
-                <ActivityLog
-                  data={departmentActivity}
-                  loading={departmentActivityLoading}
-                  error={departmentActivityError}
-                  onPageChange={(p) => setDepartmentActivityPage(p)}
-                  onUserClick={onUserClick}
-                  searchQuery={filters.search || ''}
-                  defaultSortByDuration={viewMode === 'duration'}
-                  defaultSortByUser={viewMode === 'users'}
-                />
               </div>
             ) : (
               <>

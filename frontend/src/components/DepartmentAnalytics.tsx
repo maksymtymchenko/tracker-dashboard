@@ -14,6 +14,7 @@ interface Props {
   selectedDepartment?: { id: string; name: string } | null;
   filters?: { timeRange?: 'all' | 'today' | 'week' | 'month'; search?: string; domain?: string; type?: string };
   onUserClick?(username: string): void;
+  onUserScreenshotsClick?(username: string): void;
 }
 
 export function DepartmentAnalytics({
@@ -26,6 +27,7 @@ export function DepartmentAnalytics({
   selectedDepartment,
   filters = {},
   onUserClick,
+  onUserScreenshotsClick,
 }: Props): JSX.Element {
   const [internalMetric, setInternalMetric] = useState<'events' | 'duration' | 'users'>('events');
   const viewMode = externalMetric !== undefined ? externalMetric : internalMetric;
@@ -61,6 +63,47 @@ export function DepartmentAnalytics({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Load department users when department is selected
+  useEffect(() => {
+    if (!selectedDepartment) {
+      return;
+    }
+
+    const loadSelectedDepartmentUsers = async () => {
+      const departmentId = selectedDepartment.id;
+      // Check if already loading or loaded
+      if (departmentUsersLoading.get(departmentId) || departmentUsers.has(departmentId)) {
+        return;
+      }
+
+      setDepartmentUsersLoading((prev) => new Map(prev).set(departmentId, true));
+      setDepartmentUsersError((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(departmentId);
+        return newMap;
+      });
+
+      try {
+        const users = await fetchDepartmentUsersAnalytics(departmentId);
+        setDepartmentUsers((prev) => new Map(prev).set(departmentId, users));
+      } catch (e: unknown) {
+        setDepartmentUsersError((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(departmentId, e instanceof Error ? e.message : 'Failed to load');
+          return newMap;
+        });
+      } finally {
+        setDepartmentUsersLoading((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(departmentId, false);
+          return newMap;
+        });
+      }
+    };
+
+    loadSelectedDepartmentUsers();
+  }, [selectedDepartment]);
 
   // Load department activity when department is selected
   useEffect(() => {
@@ -550,6 +593,87 @@ export function DepartmentAnalytics({
                     Back to Departments
                   </button>
                 </div>
+
+                {/* Users Section */}
+                <div className="mb-6">
+                  <div className="text-sm font-medium mb-3">
+                    {selectedDepartment.name} → Users
+                  </div>
+                  {(() => {
+                    const usersData = departmentUsers.get(selectedDepartment.id);
+                    const usersLoading = departmentUsersLoading.get(selectedDepartment.id) || false;
+                    const usersError = departmentUsersError.get(selectedDepartment.id);
+
+                    if (usersLoading) {
+                      return (
+                        <div className="text-sm text-gray-500 dark:text-gray-400 py-4">
+                          Loading users...
+                        </div>
+                      );
+                    }
+
+                    if (usersError) {
+                      return (
+                        <div className="text-sm text-red-600 dark:text-red-400 py-4">
+                          {usersError}
+                        </div>
+                      );
+                    }
+
+                    if (!usersData || usersData.length === 0) {
+                      return (
+                        <div className="text-sm text-gray-500 dark:text-gray-400 py-4">
+                          No users found in this department
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {usersData.map((user) => (
+                          <div
+                            key={user.username}
+                            className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900"
+                          >
+                            <div className="mb-3">
+                              <div className="font-medium text-sm">
+                                {user.displayName ? `${user.displayName} / ${user.username}` : user.username}
+                              </div>
+                              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                {formatDurationFromMs(user.duration)}
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              {onUserScreenshotsClick && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onUserScreenshotsClick(user.username);
+                                  }}
+                                  className="flex-1 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                >
+                                  Screenshots
+                                </button>
+                              )}
+                              {onUserClick && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onUserClick(user.username);
+                                  }}
+                                  className="flex-1 text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                                >
+                                  Details
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+
                 <ActivityLog
                   data={departmentActivity}
                   loading={departmentActivityLoading}
@@ -721,29 +845,7 @@ export function DepartmentAnalytics({
                                 <div className="text-sm text-gray-500 dark:text-gray-400">Нет данных о пользователях</div>
                               )}
                             </div>
-                          ) : (
-                            <div>
-                              <div className="text-sm font-medium mb-3">
-                                {viewMode === 'events' ? 'События департамента' : 'Активность по длительности'}
-                              </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                                {viewMode === 'events'
-                                  ? 'Показываются все действия (события) по этому департаменту: кто на какие сайты заходил, кто какие приложения держал активными'
-                                  : 'Показывается активность, отсортированная по длительности'}
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (onDepartmentClick) {
-                                    onDepartmentClick(dept.id, dept.name);
-                                  }
-                                }}
-                                className="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                              >
-                                Показать детали
-                              </button>
-                            </div>
-                          )}
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -886,29 +988,7 @@ export function DepartmentAnalytics({
                                 <div className="text-sm text-gray-500 dark:text-gray-400">Нет данных о пользователях</div>
                               )}
                             </div>
-                          ) : (
-                            <div>
-                              <div className="text-sm font-medium mb-3">
-                                {viewMode === 'events' ? 'События департамента' : 'Активность по длительности'}
-                              </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                                {viewMode === 'events'
-                                  ? 'Показываются все действия (события) по этому департаменту: кто на какие сайты заходил, кто какие приложения держал активными'
-                                  : 'Показывается активность, отсортированная по длительности'}
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (onDepartmentClick) {
-                                    onDepartmentClick(dept.id, dept.name);
-                                  }
-                                }}
-                                className="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                              >
-                                Показать детали
-                              </button>
-                            </div>
-                          )}
+                          ) : null}
                         </div>
                       )}
                     </div>

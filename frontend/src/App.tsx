@@ -10,12 +10,20 @@ import { AdminUsers } from 'src/components/AdminUsers';
 import { DepartmentsModal } from 'src/components/DepartmentsModal';
 import { DepartmentAnalytics } from 'src/components/DepartmentAnalytics';
 import { UserDetailsModal } from 'src/components/UserDetailsModal';
+import { UserScreenshotsModal } from 'src/components/UserScreenshotsModal';
 import { DepartmentUserList } from 'src/components/DepartmentUserList';
 import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, fetchDepartmentsAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout, getUsersByDepartment } from 'src/api/client';
 import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, DepartmentAnalytics as DepartmentAnalyticsType } from 'src/types';
 
 function App(): JSX.Element {
-  const [dark, setDark] = useState<boolean>(true);
+  // Load theme from localStorage, default to dark mode
+  const [dark, setDark] = useState<boolean>(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === null) {
+      return true; // Default to dark mode
+    }
+    return savedTheme === 'dark';
+  });
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authChecking, setAuthChecking] = useState<boolean>(true);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
@@ -47,6 +55,7 @@ function App(): JSX.Element {
   const [showUsers, setShowUsers] = useState(false);
   const [usersOptions, setUsersOptions] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [selectedUserScreenshots, setSelectedUserScreenshots] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<{ id: string; name: string } | null>(null);
   const [departmentMetric, setDepartmentMetric] = useState<'events' | 'duration' | 'users'>('events');
   const [departmentActivity, setDepartmentActivity] = useState<Paginated<ActivityItem> | null>(null);
@@ -65,6 +74,11 @@ function App(): JSX.Element {
     });
     return map;
   }, [usersAgg]);
+
+  // Persist theme to localStorage
+  useEffect(() => {
+    localStorage.setItem('theme', dark ? 'dark' : 'light');
+  }, [dark]);
 
   useEffect(() => {
     (async () => {
@@ -102,7 +116,7 @@ function App(): JSX.Element {
           limit: activityLimit,
           timeRange: (filters.timeRange as any) || 'all',
           user: filters.user || undefined,
-          department: filters.department || undefined,
+          department: selectedDepartment?.name || filters.department || undefined,
           domain: filters.domain || undefined,
           type: filters.type || undefined,
           search: filters.search || undefined,
@@ -113,7 +127,7 @@ function App(): JSX.Element {
     } finally {
       setActivityLoading(false);
     }
-  }, [activityPage, activityLimit, filters]);
+  }, [activityPage, activityLimit, filters, selectedDepartment]);
 
   const loadDepartmentActivity = useCallback(async () => {
     if (!selectedDepartment) {
@@ -170,7 +184,7 @@ function App(): JSX.Element {
     if (user) {
       setActivityPage(1);
     }
-  }, [user, filters.search, filters.user, filters.department, filters.domain, filters.timeRange, filters.type]);
+  }, [user, filters.search, filters.user, filters.department, filters.domain, filters.timeRange, filters.type, selectedDepartment]);
 
   // Reset screenshots page to 1 when filters change
   useEffect(() => {
@@ -239,6 +253,21 @@ function App(): JSX.Element {
     if (!user) return;
     loadActivity();
   }, [user, loadActivity]);
+
+  // Sync selectedDepartment when department filter changes manually
+  useEffect(() => {
+    if (!user) return;
+    if (filters.department && filters.department !== selectedDepartment?.name) {
+      // Find department by name to get the ID
+      const dept = deptAnalytics.find((d) => d.name === filters.department);
+      if (dept) {
+        setSelectedDepartment({ id: dept.id, name: dept.name });
+      }
+    } else if (!filters.department && selectedDepartment) {
+      // Clear selectedDepartment when filter is cleared
+      setSelectedDepartment(null);
+    }
+  }, [user, filters.department, selectedDepartment, deptAnalytics]);
 
   // Load department activity when department is selected
   useEffect(() => {
@@ -351,16 +380,23 @@ function App(): JSX.Element {
                 filters={filters}
                 onDepartmentClick={(departmentId, departmentName) => {
                   // Show activities for this department
+                  // Preserve user filter when changing department
                   if (departmentId && departmentName) {
                     setSelectedDepartment({ id: departmentId, name: departmentName });
+                    setFilters({ ...filters, department: departmentName });
                   } else {
                     // Clear selection when empty strings are passed (Back button)
+                    // Preserve user filter when clearing department
                     setSelectedDepartment(null);
+                    setFilters({ ...filters, department: undefined });
                   }
                 }}
                 onUserClick={(username) => {
                   setSelectedUser(username);
                   setFilters({ ...filters, user: username });
+                }}
+                onUserScreenshotsClick={(username) => {
+                  setSelectedUserScreenshots(username);
                 }}
               />
             </section>
@@ -374,7 +410,6 @@ function App(): JSX.Element {
               error={usersAggError}
               departmentName={selectedDepartment?.name}
               onUserClick={(username) => {
-                setSelectedUser(username);
                 setFilters({ ...filters, user: username });
                 // Scroll to Activity Log section
                 setTimeout(() => {
@@ -444,6 +479,7 @@ function App(): JSX.Element {
         <DepartmentsModal open={showDepartments} onClose={() => setShowDepartments(false)} />
         <AdminUsers open={showUsers} onClose={() => setShowUsers(false)} canManage={user?.role === 'ADMIN' || user?.role === 'admin'} />
         <UserDetailsModal username={selectedUser} onClose={() => setSelectedUser(null)} />
+        <UserScreenshotsModal username={selectedUserScreenshots} onClose={() => setSelectedUserScreenshots(null)} />
       </div>
     </div>
   );

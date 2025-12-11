@@ -187,40 +187,6 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                   <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => { setSelectedDeptId(undefined); setForm({ name: '', color: '', description: '' }); }}>Cancel</button>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { name: 'Engineering', color: '#3b82f6' },
-                  { name: 'Marketing', color: '#f59e0b' },
-                  { name: 'Sales', color: '#10b981' },
-                  { name: 'Support', color: '#ef4444' },
-                ].map((d) => (
-                  <button key={d.name} className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => setForm({ ...form, name: d.name, color: d.color })}>
-                    <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded" style={{ background: d.color }} />{d.name}</span>
-                  </button>
-                ))}
-                <button
-                  className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700"
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const defaults = [
-                        { name: 'Engineering', color: '#3b82f6' },
-                        { name: 'Marketing', color: '#f59e0b' },
-                        { name: 'Sales', color: '#10b981' },
-                        { name: 'Support', color: '#ef4444' },
-                      ];
-                      for (const d of defaults) await createDepartment(d);
-                      await load();
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : 'Failed to add defaults');
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                >
-                  Add defaults
-                </button>
-              </div>
               <div className="mt-3 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400">
@@ -265,21 +231,6 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                     <option key={d._id} value={d._id}>{d.name}</option>
                   ))}
                 </select>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={assignUser} onChange={(e) => setAssignUser(e.target.value)}>
-                  <option value="">Select User</option>
-                  {(usernames.length ? usernames : users.map((u) => u.username)).map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
-                <select className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" value={assignDept} onChange={(e) => setAssignDept(e.target.value)}>
-                  <option value="">Select Department</option>
-                  {departments.map((d) => (
-                    <option key={d._id} value={d._id}>{d.name}</option>
-                  ))}
-                </select>
-                <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700" onClick={assign} disabled={loading || !assignUser || !assignDept}>Assign</button>
               </div>
 
               <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">

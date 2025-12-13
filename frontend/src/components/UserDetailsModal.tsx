@@ -39,6 +39,22 @@ export function UserDetailsModal({ username, onClose }: Props): JSX.Element | nu
     loadData();
   }, [username]);
 
+  // Disable body scroll when modal is open
+  useEffect(() => {
+    if (!username) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [username]);
+
   if (!username) return null;
 
   const userDeptIds = userDepartments.map((ud) => ud.departmentId);
@@ -47,8 +63,21 @@ export function UserDetailsModal({ username, onClose }: Props): JSX.Element | nu
     .map((d) => d.name);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60" />
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center" 
+      onClick={onClose}
+    >
+      <div 
+        className="absolute inset-0 bg-black/60"
+        onWheel={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      />
       <div
         className="relative bg-white dark:bg-gray-900 rounded-xl p-6 shadow-2xl border border-gray-200 dark:border-gray-800 max-w-4xl w-[90vw] max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}

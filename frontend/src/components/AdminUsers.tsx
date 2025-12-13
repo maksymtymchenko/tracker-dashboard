@@ -49,6 +49,22 @@ export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | n
     }
   }, [open, canManage]);
 
+  // Disable body scroll when modal is open
+  useEffect(() => {
+    if (!open) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [open]);
+
   const pageItems = useMemo(() => {
     const list = usernames.length ? usernames : users.map((u) => u.username);
     const start = (page - 1) * limit;
@@ -58,8 +74,21 @@ export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | n
   if (!open || !canManage) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center"
+    >
+      <div 
+        className="absolute inset-0 bg-black/40" 
+        onClick={onClose}
+        onWheel={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      />
       <div className="relative w-full max-w-5xl max-h-[80vh] overflow-hidden overflow-y-auto bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-xl">
         <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
           <div className="font-semibold">Manage Users</div>

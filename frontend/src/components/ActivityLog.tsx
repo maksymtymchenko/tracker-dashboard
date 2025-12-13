@@ -43,6 +43,22 @@ export function ActivityLog({
   const [screenshotItems, setScreenshotItems] = useState<Array<{ filename: string; url?: string; username: string; domain?: string; mtime?: number }>>([]);
   const [loadingScreenshot, setLoadingScreenshot] = useState<string | null>(null);
 
+  // Disable body scroll when modal is open
+  useEffect(() => {
+    if (!open) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [open]);
+
   const formatDuration = (ms: number): string => {
     if (!Number.isFinite(ms) || ms < 0) return String(ms);
     if (ms < 1000) return `${Math.round(ms)} ms`;
@@ -958,7 +974,17 @@ export function ActivityLog({
           className="fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => setOpen(null)}
         >
-          <div className="absolute inset-0 bg-black/60" />
+          <div 
+            className="absolute inset-0 bg-black/60"
+            onWheel={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onTouchMove={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          />
           <div
             className="relative max-w-4xl w-[95vw] max-h-[90vh] bg-white dark:bg-gray-900 rounded-xl overflow-hidden shadow-2xl border border-gray-200 dark:border-white/10 flex flex-col"
             onClick={(e) => e.stopPropagation()}

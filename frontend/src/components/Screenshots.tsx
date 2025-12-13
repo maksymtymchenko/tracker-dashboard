@@ -146,6 +146,22 @@ export function Screenshots({
     return filtered;
   }, [allScreenshots, searchQuery, sortBy]);
 
+  // Disable body scroll when lightbox is open
+  useEffect(() => {
+    if (!open) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [open]);
+
   // Keyboard navigation in lightbox
   useEffect(() => {
     if (!open) return;
@@ -565,7 +581,17 @@ export function Screenshots({
           className="fixed inset-0 z-50 flex items-center justify-center"
           onClick={() => setOpen(null)}
         >
-          <div className="absolute inset-0 bg-black/80" />
+          <div 
+            className="absolute inset-0 bg-black/80"
+            onWheel={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onTouchMove={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          />
           <div
             className="relative max-w-7xl w-[95vw] h-[95vh] bg-black/90 rounded-xl overflow-hidden shadow-2xl border border-white/10"
             onClick={(e) => e.stopPropagation()}

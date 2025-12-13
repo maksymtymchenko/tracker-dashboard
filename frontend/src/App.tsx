@@ -380,13 +380,13 @@ function App(): JSX.Element {
                 filters={filters}
                 onDepartmentClick={(departmentId, departmentName) => {
                   // Show activities for this department
-                  // Preserve user filter when changing department
+                  // Clear user filter when changing department to show all users in the department
                   if (departmentId && departmentName) {
                     setSelectedDepartment({ id: departmentId, name: departmentName });
-                    setFilters({ ...filters, department: departmentName });
+                    setFilters({ ...filters, department: departmentName, user: undefined });
+                    setSelectedUser(null);
                   } else {
                     // Clear selection when empty strings are passed (Back button)
-                    // Preserve user filter when clearing department
                     setSelectedDepartment(null);
                     setFilters({ ...filters, department: undefined });
                   }

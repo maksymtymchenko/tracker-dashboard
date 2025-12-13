@@ -360,7 +360,7 @@ function App(): JSX.Element {
           <section>
             <KpiCards
               events={summary?.totals?.events || 0}
-              users={(summary as any)?.registeredUsers || summary?.totals?.users || 0}
+              users={summary?.totals?.users || 0}
               screenshots={summary?.totals?.screenshots || 0}
               domains={summary?.totals?.domains || 0}
               loading={summaryLoading}

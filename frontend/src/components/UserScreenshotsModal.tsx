@@ -15,6 +15,13 @@ export function UserScreenshotsModal({ username, onClose }: Props): JSX.Element 
   const [total, setTotal] = useState(0);
   const limit = 20;
 
+  // Reset page to 1 when username changes
+  useEffect(() => {
+    if (username) {
+      setPage(1);
+    }
+  }, [username]);
+
   useEffect(() => {
     if (!username) return;
 

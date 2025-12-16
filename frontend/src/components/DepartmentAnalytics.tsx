@@ -59,6 +59,13 @@ export function DepartmentAnalytics({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Clear expanded departments when going back to departments view
+  useEffect(() => {
+    if (!selectedDepartment) {
+      setExpandedDepartments(new Set());
+    }
+  }, [selectedDepartment]);
+
   // Load department users when department is selected
   useEffect(() => {
     if (!selectedDepartment) {
@@ -284,26 +291,13 @@ export function DepartmentAnalytics({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <div className="font-medium text-base sm:text-lg">
-            Department Analytics
-            {filteredData.length !== data.length && (
+            {selectedDepartment ? selectedDepartment.name : 'Department Analytics'}
+            {!selectedDepartment && filteredData.length !== data.length && (
               <span className="text-sm text-gray-500 dark:text-gray-400 ml-2">
                 ({filteredData.length} of {data.length})
               </span>
             )}
           </div>
-          {selectedDepartment && (
-            <button
-              onClick={() => {
-                if (onDepartmentClick) {
-                  onDepartmentClick('', '');
-                }
-              }}
-              className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-              title="Сбросить выбор департамента"
-            >
-              ✕ Сбросить
-            </button>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Search */}
@@ -314,6 +308,18 @@ export function DepartmentAnalytics({
             onChange={(e) => setSearchQuery(e.target.value)}
             className="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent min-w-[150px] flex-1 sm:flex-initial"
           />
+          {selectedDepartment && (
+            <button
+              onClick={() => {
+                if (onDepartmentClick) {
+                  onDepartmentClick('', '');
+                }
+              }}
+              className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+            >
+              Back to Departments
+            </button>
+          )}
           <div className="flex gap-2">
           <button
             className={`text-xs sm:text-sm px-3 py-1.5 sm:py-1 rounded-lg border transition-colors touch-manipulation ${
@@ -535,27 +541,12 @@ export function DepartmentAnalytics({
           <div className="mt-4">
             {selectedDepartment ? (
               <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <div className="font-medium text-base sm:text-lg">
-                      {selectedDepartment.name} - {viewMode === 'events' ? 'Events' : viewMode === 'duration' ? 'Duration' : 'Users'}
-                    </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      {viewMode === 'events' && 'Showing all activities (events) for this department'}
-                      {viewMode === 'duration' && 'Showing activities sorted by duration for this department'}
-                      {viewMode === 'users' && 'Showing activities sorted by user for this department'}
-                    </div>
+                <div className="mb-4">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    {viewMode === 'events' && 'Showing all activities (events) for this department'}
+                    {viewMode === 'duration' && 'Showing activities sorted by duration for this department'}
+                    {viewMode === 'users' && 'Showing activities sorted by user for this department'}
                   </div>
-                  <button
-                    onClick={() => {
-                      if (onDepartmentClick) {
-                        onDepartmentClick('', '');
-                      }
-                    }}
-                    className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-                  >
-                    Back to Departments
-                  </button>
                 </div>
 
                 {/* Users Section */}
@@ -750,73 +741,69 @@ export function DepartmentAnalytics({
                       </div>
 
                       {/* Expanded Content */}
-                      {isExpanded && (
+                      {isExpanded && viewMode === 'users' && (
                         <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/30">
-                          {viewMode === 'users' ? (
-                            <div>
-                              <div className="text-sm font-medium mb-3">Пользователи департамента</div>
-                              {usersLoading ? (
-                                <div className="text-sm text-gray-500 dark:text-gray-400">Загрузка...</div>
-                              ) : usersError ? (
-                                <div className="text-sm text-red-600 dark:text-red-400">{usersError}</div>
-                              ) : usersData && usersData.length > 0 ? (
-                                <div className="space-y-3">
-                                  {usersData.map((user) => (
-                                    <div
-                                      key={user.username}
-                                      className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-                                    >
-                                      <div className="flex items-start justify-between mb-2">
-                                        <div>
-                                          <div className="font-medium text-sm">
-                                            {user.displayName || user.username}
-                                          </div>
-                                          {user.displayName && (
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                                              {user.username}
-                                            </div>
-                                          )}
-                                        </div>
-                                        {onUserClick && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              onUserClick(user.username);
-                                            }}
-                                            className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-                                          >
-                                            Скриншоты
-                                          </button>
-                                        )}
+                          <div className="text-sm font-medium mb-3">Пользователи департамента</div>
+                          {usersLoading ? (
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Загрузка...</div>
+                          ) : usersError ? (
+                            <div className="text-sm text-red-600 dark:text-red-400">{usersError}</div>
+                          ) : usersData && usersData.length > 0 ? (
+                            <div className="space-y-3">
+                              {usersData.map((user) => (
+                                <div
+                                  key={user.username}
+                                  className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                                >
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div>
+                                      <div className="font-medium text-sm">
+                                        {user.displayName || user.username}
                                       </div>
-                                      <div className="grid grid-cols-2 gap-3 text-xs mt-2">
-                                        <div>
-                                          <div className="text-gray-500 dark:text-gray-400">Время активности</div>
-                                          <div className="font-semibold text-sm">
-                                            {formatDurationFromMs(user.duration)}
-                                          </div>
+                                      {user.displayName && (
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                                          {user.username}
                                         </div>
-                                        <div>
-                                          <div className="text-gray-500 dark:text-gray-400">Сайты</div>
-                                          <div className="font-semibold text-sm">{user.domains}</div>
-                                        </div>
-                                        <div>
-                                          <div className="text-gray-500 dark:text-gray-400">События</div>
-                                          <div className="font-semibold text-sm">{user.events.toLocaleString()}</div>
-                                        </div>
-                                        <div>
-                                          <div className="text-gray-500 dark:text-gray-400">Скриншоты</div>
-                                          <div className="font-semibold text-sm">{user.screenshots}</div>
-                                        </div>
+                                      )}
+                                    </div>
+                                    {onUserClick && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onUserClick(user.username);
+                                        }}
+                                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                                      >
+                                        Скриншоты
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3 text-xs mt-2">
+                                    <div>
+                                      <div className="text-gray-500 dark:text-gray-400">Время активности</div>
+                                      <div className="font-semibold text-sm">
+                                        {formatDurationFromMs(user.duration)}
                                       </div>
                                     </div>
-                                  ))}
+                                    <div>
+                                      <div className="text-gray-500 dark:text-gray-400">Сайты</div>
+                                      <div className="font-semibold text-sm">{user.domains}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-gray-500 dark:text-gray-400">События</div>
+                                      <div className="font-semibold text-sm">{user.events.toLocaleString()}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-gray-500 dark:text-gray-400">Скриншоты</div>
+                                      <div className="font-semibold text-sm">{user.screenshots}</div>
+                                    </div>
+                                  </div>
                                 </div>
-                              ) : (
-                                <div className="text-sm text-gray-500 dark:text-gray-400">Нет данных о пользователях</div>
-                              )}
+                              ))}
                             </div>
-                          ) : null}
+                          ) : (
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Нет данных о пользователях</div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -893,73 +880,69 @@ export function DepartmentAnalytics({
                       </div>
 
                       {/* Expanded Content */}
-                      {isExpanded && (
+                      {isExpanded && viewMode === 'users' && (
                         <div className="mt-2 ml-7 p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/30">
-                          {viewMode === 'users' ? (
-                            <div>
-                              <div className="text-sm font-medium mb-3">Пользователи департамента</div>
-                              {usersLoading ? (
-                                <div className="text-sm text-gray-500 dark:text-gray-400">Загрузка...</div>
-                              ) : usersError ? (
-                                <div className="text-sm text-red-600 dark:text-red-400">{usersError}</div>
-                              ) : usersData && usersData.length > 0 ? (
-                                <div className="space-y-3">
-                                  {usersData.map((user) => (
-                                    <div
-                                      key={user.username}
-                                      className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-                                    >
-                                      <div className="flex items-start justify-between mb-2">
-                                        <div>
-                                          <div className="font-medium text-sm">
-                                            {user.displayName || user.username}
-                                          </div>
-                                          {user.displayName && (
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                                              {user.username}
-                                            </div>
-                                          )}
-                                        </div>
-                                        {onUserClick && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              onUserClick(user.username);
-                                            }}
-                                            className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-                                          >
-                                            Скриншоты
-                                          </button>
-                                        )}
+                          <div className="text-sm font-medium mb-3">Пользователи департамента</div>
+                          {usersLoading ? (
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Загрузка...</div>
+                          ) : usersError ? (
+                            <div className="text-sm text-red-600 dark:text-red-400">{usersError}</div>
+                          ) : usersData && usersData.length > 0 ? (
+                            <div className="space-y-3">
+                              {usersData.map((user) => (
+                                <div
+                                  key={user.username}
+                                  className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+                                >
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div>
+                                      <div className="font-medium text-sm">
+                                        {user.displayName || user.username}
                                       </div>
-                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mt-2">
-                                        <div>
-                                          <div className="text-gray-500 dark:text-gray-400">Время активности</div>
-                                          <div className="font-semibold text-sm">
-                                            {formatDurationFromMs(user.duration)}
-                                          </div>
+                                      {user.displayName && (
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                                          {user.username}
                                         </div>
-                                        <div>
-                                          <div className="text-gray-500 dark:text-gray-400">Сайты</div>
-                                          <div className="font-semibold text-sm">{user.domains}</div>
-                                        </div>
-                                        <div>
-                                          <div className="text-gray-500 dark:text-gray-400">События</div>
-                                          <div className="font-semibold text-sm">{user.events.toLocaleString()}</div>
-                                        </div>
-                                        <div>
-                                          <div className="text-gray-500 dark:text-gray-400">Скриншоты</div>
-                                          <div className="font-semibold text-sm">{user.screenshots}</div>
-                                        </div>
+                                      )}
+                                    </div>
+                                    {onUserClick && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onUserClick(user.username);
+                                        }}
+                                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                                      >
+                                        Скриншоты
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs mt-2">
+                                    <div>
+                                      <div className="text-gray-500 dark:text-gray-400">Время активности</div>
+                                      <div className="font-semibold text-sm">
+                                        {formatDurationFromMs(user.duration)}
                                       </div>
                                     </div>
-                                  ))}
+                                    <div>
+                                      <div className="text-gray-500 dark:text-gray-400">Сайты</div>
+                                      <div className="font-semibold text-sm">{user.domains}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-gray-500 dark:text-gray-400">События</div>
+                                      <div className="font-semibold text-sm">{user.events.toLocaleString()}</div>
+                                    </div>
+                                    <div>
+                                      <div className="text-gray-500 dark:text-gray-400">Скриншоты</div>
+                                      <div className="font-semibold text-sm">{user.screenshots}</div>
+                                    </div>
+                                  </div>
                                 </div>
-                              ) : (
-                                <div className="text-sm text-gray-500 dark:text-gray-400">Нет данных о пользователях</div>
-                              )}
+                              ))}
                             </div>
-                          ) : null}
+                          ) : (
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Нет данных о пользователях</div>
+                          )}
                         </div>
                       )}
                     </div>

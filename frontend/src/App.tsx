@@ -305,6 +305,15 @@ function App(): JSX.Element {
     return usersAgg.filter((user) => deptUsersSet.has(user.username));
   }, [usersAgg, departmentUsers, selectedDepartment]);
 
+  // Filter usersOptions by selected department
+  const filteredUsersOptions = useMemo(() => {
+    if (!selectedDepartment || departmentUsers.length === 0) {
+      return usersOptions;
+    }
+    const deptUsersSet = new Set(departmentUsers);
+    return usersOptions.filter((username) => deptUsersSet.has(username));
+  }, [usersOptions, departmentUsers, selectedDepartment]);
+
   // Load screenshots when page or user filter changes
   useEffect(() => {
     if (!user) return;
@@ -434,7 +443,7 @@ function App(): JSX.Element {
               onExportJSON={() => window.open('/api/export/json', '_blank')}
               onRefresh={loadActivity}
               loading={activityLoading}
-              usersOptions={usersOptions}
+              usersOptions={filteredUsersOptions}
               displayNames={displayNames}
             />
             <div className="mt-4">
@@ -462,7 +471,7 @@ function App(): JSX.Element {
             limit={shotsLimit}
             total={shotsTotal}
             onPageChange={(p) => setShotsPage(p)}
-            usersOptions={usersOptions}
+            usersOptions={filteredUsersOptions}
             userFilter={filters.user || shotsUser}
             onUserFilterChange={(u) => {
               setShotsPage(1);

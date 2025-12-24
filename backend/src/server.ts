@@ -68,7 +68,9 @@ app.use(helmet({
 }));
 
 app.use(express.json({ limit: '10mb' }));
-app.use(morgan('dev'));
+if (!isProduction) {
+  app.use(morgan('dev'));
+}
 
 // Security logging middleware
 app.use(securityLogger);
@@ -97,6 +99,8 @@ if (process.env.MONGO_URI) {
     sessionOptions.store = MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
       dbName: process.env.MONGO_DB,
+      // Reduce write load by only touching sessions once per day.
+      touchAfter: 24 * 60 * 60,
     });
   } catch {
     console.warn('Mongo session store init failed, using memory store');

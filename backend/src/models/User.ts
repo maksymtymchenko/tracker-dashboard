@@ -10,7 +10,7 @@ const UserSchema = new Schema(
      * This is used in statistics and UI, while `username` remains
      * the primary account/login identifier.
      */
-    displayName: { type: String },
+    displayName: { type: String, index: true },
     createdAt: { type: Date, default: Date.now },
     lastLogin: { type: Date },
   },
@@ -19,5 +19,4 @@ const UserSchema = new Schema(
 
 export type User = InferSchemaType<typeof UserSchema>;
 export const UserModel = model('User', UserSchema);
-
 

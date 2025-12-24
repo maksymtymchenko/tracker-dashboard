@@ -15,8 +15,8 @@ const ScreenshotSchema = new Schema(
 ScreenshotSchema.index({ mtime: -1 });
 ScreenshotSchema.index({ username: 1, mtime: -1 });
 ScreenshotSchema.index({ domain: 1, mtime: -1 });
+ScreenshotSchema.index({ filename: 1 });
 
 export type Screenshot = InferSchemaType<typeof ScreenshotSchema>;
 export const ScreenshotModel = model('Screenshot', ScreenshotSchema);
-
 

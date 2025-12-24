@@ -25,6 +25,21 @@ const OldEventShape = z.object({
   data: z.any().optional(),
 });
 
+function normalizeLower(value?: string): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.toLowerCase() : undefined;
+}
+
+function extractReasonLower(data: unknown): string | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const d = data as Record<string, unknown>;
+  if (typeof d.reason === 'string') {
+    return normalizeLower(d.reason);
+  }
+  return undefined;
+}
+
 export async function collectActivity(req: Request, res: Response) {
   const body = z
     .object({ events: z.array(z.union([NewEventShape, OldEventShape])) })
@@ -34,29 +49,43 @@ export async function collectActivity(req: Request, res: Response) {
       .status(400)
       .json({ error: 'invalid payload', issues: body.error.issues });
   const docs = await EventModel.insertMany(
-    body.data.events.map((e) =>
-      'time' in e
-        ? {
-            deviceIdHash: undefined,
-            domain: e.domain,
-            durationMs: e.duration ?? undefined,
-            timestamp: e.time,
-            reason: undefined,
-            username: e.username,
-            type: e.type,
-            data: e.details,
-          }
-        : {
-            deviceIdHash: e.deviceIdHash,
-            domain: e.domain,
-            durationMs: e.durationMs,
-            timestamp: e.timestamp,
-            reason: e.reason,
-            username: e.username,
-            type: e.type,
-            data: e.data,
-          },
-    ),
+    body.data.events.map((e) => {
+      if ('time' in e) {
+        const dataReasonLower = extractReasonLower(e.details);
+        return {
+          deviceIdHash: undefined,
+          domain: e.domain,
+          durationMs: e.duration ?? undefined,
+          timestamp: e.time,
+          reason: undefined,
+          username: e.username,
+          type: e.type,
+          data: e.details,
+          usernameLower: normalizeLower(e.username),
+          domainLower: normalizeLower(e.domain),
+          typeLower: normalizeLower(e.type),
+          reasonLower: undefined,
+          dataReasonLower,
+        };
+      }
+      const dataReasonLower = extractReasonLower(e.data);
+      return {
+        deviceIdHash: e.deviceIdHash,
+        domain: e.domain,
+        durationMs: e.durationMs,
+        timestamp: e.timestamp,
+        reason: e.reason,
+        username: e.username,
+        type: e.type,
+        data: e.data,
+        usernameLower: normalizeLower(e.username),
+        domainLower: normalizeLower(e.domain),
+        typeLower: normalizeLower(e.type),
+        reasonLower: normalizeLower(e.reason),
+        dataReasonLower,
+      };
+    }),
+    { ordered: false },
   );
   return res.json({
     received: docs.length,
@@ -72,13 +101,18 @@ export async function listActivity(req: Request, res: Response) {
     username: z.string().optional(),
     department: z.string().optional(),
     search: z.string().optional(),
+    searchMode: z.enum(['text', 'regex']).default('text'),
     domain: z.string().optional(),
     type: z.string().optional(),
     page: z.coerce.number().default(1),
     limit: z.coerce.number().default(20),
     timeRange: z.enum(['all', 'today', 'week', 'month']).optional(),
+    after: z.string().optional(),
+    includeStats: z.coerce.boolean().optional(),
+    includeTotal: z.coerce.boolean().optional(),
   });
   const q = querySchema.parse(req.query);
+  const isLegacyFormat = (req.query.format as string) === 'legacy';
 
   const filter: Record<string, unknown> = {};
 
@@ -137,37 +171,45 @@ export async function listActivity(req: Request, res: Response) {
 
   // Text search across common fields (username, domain, type, reason, details.reason, and displayName)
   if (q.search && q.search.trim()) {
-    const regex = new RegExp(q.search.trim(), 'i');
+    const searchTerm = q.search.trim();
     // Find usernames that match the search in their displayName
-    const displayNameMatches = await UserModel.find(
-      { displayName: regex },
-      { username: 1 },
-    ).lean();
-    const profileDisplayNameMatches = await UserProfileModel.find(
-      { displayName: regex },
-      { username: 1 },
-    ).lean();
+    const [displayNameMatches, profileDisplayNameMatches] = await Promise.all([
+      UserModel.find(
+        { displayName: new RegExp(searchTerm, 'i') },
+        { username: 1 },
+      ).lean(),
+      UserProfileModel.find(
+        { displayName: new RegExp(searchTerm, 'i') },
+        { username: 1 },
+      ).lean(),
+    ]);
     const matchingUsernames = [
       ...displayNameMatches.map((u: any) => u.username),
       ...profileDisplayNameMatches.map((p: any) => p.username),
     ].filter(Boolean);
 
-    const searchConditions: any[] = [
-      { username: regex },
-      { domain: regex },
-      { type: regex },
-      // legacy reason field
-      { reason: regex },
-      // new events reason nested in data/details
-      { 'data.reason': regex },
-    ];
+    if (q.searchMode === 'regex') {
+      const regex = new RegExp(searchTerm, 'i');
+      const searchConditions: any[] = [
+        { username: regex },
+        { domain: regex },
+        { type: regex },
+        // legacy reason field
+        { reason: regex },
+        // new events reason nested in data/details
+        { 'data.reason': regex },
+      ];
 
-    // Add username matches from displayName search
-    if (matchingUsernames.length > 0) {
-      searchConditions.push({ username: { $in: matchingUsernames } });
+      // Add username matches from displayName search
+      if (matchingUsernames.length > 0) {
+        searchConditions.push({ username: { $in: matchingUsernames } });
+      }
+
+      filter.$or = searchConditions;
+    } else {
+      const textTerms = [searchTerm, ...matchingUsernames].join(' ');
+      filter.$text = { $search: textTerms };
     }
-
-    filter.$or = searchConditions;
   }
 
   // Handle department filtering
@@ -262,15 +304,92 @@ export async function listActivity(req: Request, res: Response) {
 
   const page = Math.max(1, q.page);
   const limit = Math.min(100, Math.max(1, q.limit));
-  const skip = (page - 1) * limit;
 
-  const [events, total] = await Promise.all([
+  let cursorFilter: Record<string, unknown> | undefined;
+  if (q.after) {
+    const separatorIndex = q.after.lastIndexOf(':');
+    if (separatorIndex > 0) {
+      const tsPart = q.after.slice(0, separatorIndex);
+      const idPart = q.after.slice(separatorIndex + 1);
+      const tsNumber = Number(tsPart);
+      if (!Number.isNaN(tsNumber) && idPart) {
+        const cursorDate = new Date(tsNumber);
+        cursorFilter = {
+          $or: [
+            { timestamp: { $lt: cursorDate } },
+            { timestamp: cursorDate, _id: { $lt: idPart } },
+          ],
+        };
+      }
+    }
+  }
+  const isCursorMode = Boolean(cursorFilter);
+  const skip = isCursorMode ? 0 : (page - 1) * limit;
+
+  const andFilters: Record<string, unknown>[] = [];
+  if (filter.$or) {
+    andFilters.push({ $or: filter.$or });
+    delete filter.$or;
+  }
+  if (cursorFilter) {
+    andFilters.push(cursorFilter);
+  }
+  if (andFilters.length > 0) {
+    filter.$and = filter.$and ? [...(filter.$and as any[]), ...andFilters] : andFilters;
+  }
+
+  const includeStats = q.includeStats ?? !isLegacyFormat;
+  const includeTotal = q.includeTotal ?? !isCursorMode;
+  const statsPromise = !includeStats
+    ? Promise.resolve([])
+    : isLegacyFormat
+    ? Promise.resolve([])
+    : EventModel.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: null,
+            totalEvents: { $sum: 1 },
+            totalDuration: { $sum: { $ifNull: ['$durationMs', 0] } },
+            users: { $addToSet: '$username' },
+            domains: { $addToSet: '$domain' },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            totalEvents: 1,
+            totalDuration: 1,
+            uniqueUsers: { $size: '$users' },
+            uniqueDomains: { $size: '$domains' },
+            averageDuration: {
+              $cond: [
+                { $gt: ['$totalEvents', 0] },
+                { $divide: ['$totalDuration', '$totalEvents'] },
+                0,
+              ],
+            },
+          },
+        },
+      ]);
+  const queryLimit = isCursorMode ? limit + 1 : limit;
+  const [events, total, legacyAgg] = await Promise.all([
     EventModel.find(filter)
-      .sort({ timestamp: -1 })
+      .select({
+        timestamp: 1,
+        username: 1,
+        domain: 1,
+        type: 1,
+        durationMs: 1,
+        reason: 1,
+        data: 1,
+      })
+      .sort({ timestamp: -1, _id: -1 })
       .skip(skip)
-      .limit(limit)
+      .limit(queryLimit)
       .lean(),
-    EventModel.countDocuments(filter),
+    includeTotal ? EventModel.countDocuments(filter) : Promise.resolve(0),
+    statsPromise,
   ]);
 
   // enrich with department names and display names based on latest mappings
@@ -333,8 +452,14 @@ export async function listActivity(req: Request, res: Response) {
     );
   };
 
+  const hasMore = isCursorMode && events.length > limit;
+  const slicedEvents = isCursorMode && hasMore ? events.slice(0, limit) : events;
+  const nextCursor = isCursorMode && hasMore
+    ? `${new Date(slicedEvents[slicedEvents.length - 1].timestamp as any).getTime()}:${slicedEvents[slicedEvents.length - 1]._id}`
+    : null;
+
   // map DB schema to frontend ActivityItem shape
-  const items = events.map((e: any) => ({
+  const items = slicedEvents.map((e: any) => ({
     _id: (e as any)._id,
     time:
       (e.timestamp as any)?.toISOString?.() ||
@@ -349,7 +474,7 @@ export async function listActivity(req: Request, res: Response) {
     details: (e.data as any) ?? undefined,
   }));
 
-  if ((req.query.format as string) === 'legacy') {
+  if (isLegacyFormat) {
     // compute stats for legacy shape
     const agg = await EventModel.aggregate([
       { $match: filter },
@@ -386,7 +511,8 @@ export async function listActivity(req: Request, res: Response) {
       totalDuration: 0,
       averageDuration: 0,
     };
-    const legacyEvents = events.map((e: any) => ({
+    const legacySource = isCursorMode ? slicedEvents : events;
+    const legacyEvents = legacySource.map((e: any) => ({
       username: e.username,
       domain: e.domain,
       durationMs: e.durationMs,
@@ -395,37 +521,9 @@ export async function listActivity(req: Request, res: Response) {
       type: e.type,
       data: e.data,
     }));
-    return res.json({ count: events.length, events: legacyEvents, stats });
+    return res.json({ count: legacyEvents.length, events: legacyEvents, stats });
   }
   // Also include legacy-compatible fields alongside paginated items
-  const legacyAgg = await EventModel.aggregate([
-    { $match: filter },
-    {
-      $group: {
-        _id: null,
-        totalEvents: { $sum: 1 },
-        totalDuration: { $sum: { $ifNull: ['$durationMs', 0] } },
-        users: { $addToSet: '$username' },
-        domains: { $addToSet: '$domain' },
-      },
-    },
-    {
-      $project: {
-        _id: 0,
-        totalEvents: 1,
-        totalDuration: 1,
-        uniqueUsers: { $size: '$users' },
-        uniqueDomains: { $size: '$domains' },
-        averageDuration: {
-          $cond: [
-            { $gt: ['$totalEvents', 0] },
-            { $divide: ['$totalDuration', '$totalEvents'] },
-            0,
-          ],
-        },
-      },
-    },
-  ]);
   const compatStats = legacyAgg[0] || {
     totalEvents: 0,
     uniqueUsers: 0,
@@ -435,11 +533,13 @@ export async function listActivity(req: Request, res: Response) {
   };
   return res.json({
     items,
-    page,
+    page: isCursorMode ? undefined : page,
     limit,
-    total,
-    count: events.length,
-    stats: compatStats,
+    total: includeTotal ? total : undefined,
+    count: items.length,
+    stats: includeStats ? compatStats : undefined,
+    hasMore: isCursorMode ? hasMore : undefined,
+    nextCursor,
   });
 }
 

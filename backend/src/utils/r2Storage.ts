@@ -9,6 +9,7 @@ class R2Storage {
   private client: S3Client | null = null;
   private bucketName: string;
   private publicUrl?: string;
+  private signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
   constructor() {
     this.bucketName = process.env.R2_BUCKET_NAME || 'screenshots';
@@ -65,13 +66,7 @@ class R2Storage {
     }
 
     // Generate a signed URL that's valid for 1 hour
-    const getCommand = new GetObjectCommand({
-      Bucket: this.bucketName,
-      Key: key,
-    });
-
-    const signedUrl = await getSignedUrl(this.client, getCommand, { expiresIn: 3600 });
-    return signedUrl;
+    return this.getSignedUrlCached(key, 3600);
   }
 
   /**
@@ -88,6 +83,24 @@ class R2Storage {
     });
 
     return await getSignedUrl(this.client, command, { expiresIn });
+  }
+
+  /**
+   * Generate a signed URL with a short-lived in-memory cache.
+   */
+  async getSignedUrlCached(key: string, expiresIn: number = 3600): Promise<string> {
+    const cached = this.signedUrlCache.get(key);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
+      return cached.url;
+    }
+
+    const url = await this.getSignedUrl(key, expiresIn);
+    const ttlMs = Math.max(0, expiresIn * 1000 - 30000);
+    if (ttlMs > 0) {
+      this.signedUrlCache.set(key, { url, expiresAt: now + ttlMs });
+    }
+    return url;
   }
 
   /**
@@ -119,4 +132,3 @@ class R2Storage {
 
 // Export singleton instance
 export const r2Storage = new R2Storage();
-

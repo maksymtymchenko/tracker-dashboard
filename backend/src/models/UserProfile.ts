@@ -8,13 +8,12 @@ const UserProfileSchema = new Schema(
      * This is used purely for UI/analytics; authentication still
      * relies on the main User document (if it exists).
      */
-    displayName: { type: String, required: true },
+    displayName: { type: String, required: true, index: true },
   },
   { timestamps: true, versionKey: false },
 );
 
 export type UserProfile = InferSchemaType<typeof UserProfileSchema>;
 export const UserProfileModel = model('UserProfile', UserProfileSchema);
-
 
 

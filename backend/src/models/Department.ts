@@ -2,7 +2,7 @@ import { Schema, model, InferSchemaType } from 'mongoose';
 
 const DepartmentSchema = new Schema(
   {
-    name: { type: String, required: true },
+    name: { type: String, required: true, index: true },
     color: { type: String, required: false },
     description: { type: String, required: false },
   },
@@ -26,5 +26,4 @@ UserDepartmentSchema.index({ departmentId: 1, username: 1 });
 
 export type UserDepartment = InferSchemaType<typeof UserDepartmentSchema>;
 export const UserDepartmentModel = model('UserDepartment', UserDepartmentSchema);
-
 

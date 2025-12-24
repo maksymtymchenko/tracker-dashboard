@@ -141,8 +141,10 @@ export async function listScreenshots(req: Request, res: Response) {
   if (q.search && q.search.trim()) {
     const regex = new RegExp(q.search.trim(), 'i');
     // Find usernames that match the search in their displayName
-    const displayNameMatches = await UserModel.find({ displayName: regex }, { username: 1 }).lean();
-    const profileDisplayNameMatches = await UserProfileModel.find({ displayName: regex }, { username: 1 }).lean();
+    const [displayNameMatches, profileDisplayNameMatches] = await Promise.all([
+      UserModel.find({ displayName: regex }, { username: 1 }).lean(),
+      UserProfileModel.find({ displayName: regex }, { username: 1 }).lean(),
+    ]);
     const matchingUsernames = [
       ...displayNameMatches.map((u: any) => u.username),
       ...profileDisplayNameMatches.map((p: any) => p.username),
@@ -209,7 +211,19 @@ export async function listScreenshots(req: Request, res: Response) {
 
   const skip = (page - 1) * limit;
   const [items, total] = await Promise.all([
-    ScreenshotModel.find(filter).sort({ mtime: -1 }).skip(skip).limit(limit).lean(),
+    ScreenshotModel.find(filter)
+      .select({
+        filename: 1,
+        url: 1,
+        mtime: 1,
+        domain: 1,
+        username: 1,
+        deviceId: 1,
+      })
+      .sort({ mtime: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     ScreenshotModel.countDocuments(filter),
   ]);
 
@@ -228,11 +242,11 @@ export async function listScreenshots(req: Request, res: Response) {
       try {
         // Generate signed URL for R2 screenshots (valid for 1 hour)
         // Try with normalized filename first
-        url = await r2Storage.getSignedUrl(normalizedFilename);
+        url = await r2Storage.getSignedUrlCached(normalizedFilename);
       } catch (error) {
         // If normalized filename fails, try original filename (for backwards compatibility)
         try {
-          url = await r2Storage.getSignedUrl(s.filename);
+          url = await r2Storage.getSignedUrlCached(s.filename);
         } catch (error2) {
           console.error(`Failed to get signed URL for ${s.filename} (normalized: ${normalizedFilename}):`, error2);
           // If signed URL generation fails, use stored URL or return error
@@ -351,5 +365,3 @@ export async function bulkDeleteScreenshots(req: Request, res: Response) {
 
   return res.json({ ok: true, deleted: result.deletedCount || 0 });
 }
-
-

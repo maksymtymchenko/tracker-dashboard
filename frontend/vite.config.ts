@@ -22,6 +22,15 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom'],
+            charts: ['recharts'],
+            vendor: ['axios'],
+          },
+        },
+      },
     },
     resolve: {
       alias: {

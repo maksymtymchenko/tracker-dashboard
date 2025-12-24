@@ -1,19 +1,33 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
 import { Header } from 'src/components/Header';
 import { KpiCards } from 'src/components/KpiCards';
 import { ActivityLog } from 'src/components/ActivityLog';
-import { Screenshots } from 'src/components/Screenshots';
 import { Login } from 'src/components/Login';
-import { DomainActivityChart } from 'src/components/DomainActivityChart';
 import { ActivityFilters, ActivityFilterState } from 'src/components/ActivityFilters';
-import { AdminUsers } from 'src/components/AdminUsers';
-import { DepartmentsModal } from 'src/components/DepartmentsModal';
-import { DepartmentAnalytics } from 'src/components/DepartmentAnalytics';
-import { UserDetailsModal } from 'src/components/UserDetailsModal';
-import { UserScreenshotsModal } from 'src/components/UserScreenshotsModal';
-import { DepartmentUserList } from 'src/components/DepartmentUserList';
 import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, fetchDepartmentsAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout, getUsersByDepartment, API_BASE_URL } from 'src/api/client';
 import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, DepartmentAnalytics as DepartmentAnalyticsType } from 'src/types';
+
+const Screenshots = React.lazy(() =>
+  import('src/components/Screenshots').then((module) => ({ default: module.Screenshots })),
+);
+const DomainActivityChart = React.lazy(() =>
+  import('src/components/DomainActivityChart').then((module) => ({ default: module.DomainActivityChart })),
+);
+const AdminUsers = React.lazy(() =>
+  import('src/components/AdminUsers').then((module) => ({ default: module.AdminUsers })),
+);
+const DepartmentsModal = React.lazy(() =>
+  import('src/components/DepartmentsModal').then((module) => ({ default: module.DepartmentsModal })),
+);
+const DepartmentAnalytics = React.lazy(() =>
+  import('src/components/DepartmentAnalytics').then((module) => ({ default: module.DepartmentAnalytics })),
+);
+const UserDetailsModal = React.lazy(() =>
+  import('src/components/UserDetailsModal').then((module) => ({ default: module.UserDetailsModal })),
+);
+const UserScreenshotsModal = React.lazy(() =>
+  import('src/components/UserScreenshotsModal').then((module) => ({ default: module.UserScreenshotsModal })),
+);
 
 function App(): JSX.Element {
   // Load theme from localStorage, default to dark mode
@@ -379,59 +393,63 @@ function App(): JSX.Element {
 
           {deptAnalytics.length > 0 && (
             <section>
-              <DepartmentAnalytics 
-                data={deptAnalytics} 
-                loading={deptAnalyticsLoading} 
-                error={deptAnalyticsError}
-                selectedMetric={departmentMetric}
-                onMetricChange={setDepartmentMetric}
-                selectedDepartment={selectedDepartment}
-                filters={filters}
-                onDepartmentClick={(departmentId, departmentName) => {
-                  // Show activities for this department
-                  // Clear user filter when changing department to show all users in the department
-                  if (departmentId && departmentName) {
-                    setSelectedDepartment({ id: departmentId, name: departmentName });
-                    setFilters({ ...filters, department: departmentName, user: undefined });
-                    setSelectedUser(null);
-                  } else {
-                    // Clear selection when empty strings are passed (Back button)
-                    setSelectedDepartment(null);
-                    setFilters({ ...filters, department: undefined });
-                  }
-                }}
-                onUserClick={(username) => {
-                  setSelectedUser(username);
-                  setFilters({ ...filters, user: username });
-                }}
-                onUserScreenshotsClick={(username) => {
-                  setSelectedUserScreenshots(username);
-                }}
-              />
+              <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading analytics...</div>}>
+                <DepartmentAnalytics
+                  data={deptAnalytics}
+                  loading={deptAnalyticsLoading}
+                  error={deptAnalyticsError}
+                  selectedMetric={departmentMetric}
+                  onMetricChange={setDepartmentMetric}
+                  selectedDepartment={selectedDepartment}
+                  filters={filters}
+                  onDepartmentClick={(departmentId, departmentName) => {
+                    // Show activities for this department
+                    // Clear user filter when changing department to show all users in the department
+                    if (departmentId && departmentName) {
+                      setSelectedDepartment({ id: departmentId, name: departmentName });
+                      setFilters({ ...filters, department: departmentName, user: undefined });
+                      setSelectedUser(null);
+                    } else {
+                      // Clear selection when empty strings are passed (Back button)
+                      setSelectedDepartment(null);
+                      setFilters({ ...filters, department: undefined });
+                    }
+                  }}
+                  onUserClick={(username) => {
+                    setSelectedUser(username);
+                    setFilters({ ...filters, user: username });
+                  }}
+                  onUserScreenshotsClick={(username) => {
+                    setSelectedUserScreenshots(username);
+                  }}
+                />
+              </Suspense>
             </section>
           )}
 
 
           <section>
-            <DomainActivityChart 
-              data={filteredUsersAgg} 
-              loading={usersAggLoading || departmentUsersLoading} 
-              error={usersAggError}
-              departmentName={selectedDepartment?.name}
-              onUserClick={(username) => {
-                setFilters({ ...filters, user: username });
-                // Scroll to Activity Log section
-                setTimeout(() => {
-                  const sections = document.querySelectorAll('section');
-                  sections.forEach((section) => {
-                    const heading = section.querySelector('.font-medium');
-                    if (heading && heading.textContent?.includes('Activity Log')) {
-                      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                  });
-                }, 100);
-              }}
-            />
+            <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading chart...</div>}>
+              <DomainActivityChart
+                data={filteredUsersAgg}
+                loading={usersAggLoading || departmentUsersLoading}
+                error={usersAggError}
+                departmentName={selectedDepartment?.name}
+                onUserClick={(username) => {
+                  setFilters({ ...filters, user: username });
+                  // Scroll to Activity Log section
+                  setTimeout(() => {
+                    const sections = document.querySelectorAll('section');
+                    sections.forEach((section) => {
+                      const heading = section.querySelector('.font-medium');
+                      if (heading && heading.textContent?.includes('Activity Log')) {
+                        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }
+                    });
+                  }, 100);
+                }}
+              />
+            </Suspense>
           </section>
 
           <section className="p-4 rounded-xl bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800">
@@ -470,33 +488,43 @@ function App(): JSX.Element {
             </div>
           </section>
 
-          <Screenshots
-            items={shots}
-            loading={shotsLoading}
-            error={shotsError}
-            onRefresh={loadScreenshots}
-            page={shotsPage}
-            limit={shotsLimit}
-            total={shotsTotal}
-            onPageChange={(p) => setShotsPage(p)}
-            usersOptions={filteredUsersOptions}
-            userFilter={filters.user || shotsUser}
-            onUserFilterChange={(u) => {
-              setShotsPage(1);
-              setShotsUser(u);
-              // Sync with ActivityFilters
-              setFilters({ ...filters, user: u || undefined });
-            }}
-            userRole={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'}
-            searchQuery={filters.search}
-            displayNames={displayNames}
-          />
+          <Suspense fallback={<div className="p-4 text-sm text-gray-500">Loading screenshots...</div>}>
+            <Screenshots
+              items={shots}
+              loading={shotsLoading}
+              error={shotsError}
+              onRefresh={loadScreenshots}
+              page={shotsPage}
+              limit={shotsLimit}
+              total={shotsTotal}
+              onPageChange={(p) => setShotsPage(p)}
+              usersOptions={filteredUsersOptions}
+              userFilter={filters.user || shotsUser}
+              onUserFilterChange={(u) => {
+                setShotsPage(1);
+                setShotsUser(u);
+                // Sync with ActivityFilters
+                setFilters({ ...filters, user: u || undefined });
+              }}
+              userRole={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'}
+              searchQuery={filters.search}
+              displayNames={displayNames}
+            />
+          </Suspense>
 
         </main>
-        <DepartmentsModal open={showDepartments} onClose={() => setShowDepartments(false)} />
-        <AdminUsers open={showUsers} onClose={() => setShowUsers(false)} canManage={user?.role === 'ADMIN' || user?.role === 'admin'} />
-        <UserDetailsModal username={selectedUser} onClose={() => setSelectedUser(null)} />
-        <UserScreenshotsModal username={selectedUserScreenshots} onClose={() => setSelectedUserScreenshots(null)} />
+        <Suspense fallback={null}>
+          <DepartmentsModal open={showDepartments} onClose={() => setShowDepartments(false)} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <AdminUsers open={showUsers} onClose={() => setShowUsers(false)} canManage={user?.role === 'ADMIN' || user?.role === 'admin'} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <UserDetailsModal username={selectedUser} onClose={() => setSelectedUser(null)} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <UserScreenshotsModal username={selectedUserScreenshots} onClose={() => setSelectedUserScreenshots(null)} />
+        </Suspense>
       </div>
     </div>
   );

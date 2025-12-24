@@ -33,6 +33,27 @@ function extractFilename(pathOrFilename: string): string {
   return pathOrFilename;
 }
 
+function intersectUserFilter(
+  current: unknown,
+  departmentUsernames: string[],
+): { empty: boolean; value?: unknown } {
+  if (!current) return { empty: false };
+  if (typeof current === 'string') {
+    return departmentUsernames.includes(current)
+      ? { empty: false, value: current }
+      : { empty: true };
+  }
+  if (typeof current === 'object' && current !== null) {
+    const maybeIn = (current as Record<string, unknown>).$in;
+    if (Array.isArray(maybeIn)) {
+      const allowed = maybeIn.filter((u) => typeof u === 'string' && departmentUsernames.includes(u));
+      if (allowed.length === 0) return { empty: true };
+      return { empty: false, value: allowed.length === 1 ? allowed[0] : { $in: allowed } };
+    }
+  }
+  return { empty: false, value: current };
+}
+
 export async function collectScreenshot(req: Request, res: Response) {
   const parsed = CollectSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'invalid payload', issues: parsed.error.issues });
@@ -173,9 +194,13 @@ export async function listScreenshots(req: Request, res: Response) {
       if (departmentUsernames.length > 0) {
         // If username filter is already set, intersect with department users
         if (filter.username) {
-          if (!departmentUsernames.includes(filter.username as string)) {
+          const intersected = intersectUserFilter(filter.username, departmentUsernames);
+          if (intersected.empty) {
             // User is not in this department, return empty results
             return res.json({ items: [], total: 0, page, limit, count: 0, files: [] });
+          }
+          if (intersected.value !== undefined) {
+            filter.username = intersected.value as any;
           }
         } else {
           // Filter by all users in this department

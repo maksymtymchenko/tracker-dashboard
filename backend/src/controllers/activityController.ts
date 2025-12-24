@@ -40,6 +40,35 @@ function extractReasonLower(data: unknown): string | undefined {
   return undefined;
 }
 
+function toIsoOrEpoch(value: unknown): string {
+  const date = new Date(value as any);
+  if (Number.isNaN(date.getTime())) {
+    return new Date(0).toISOString();
+  }
+  return date.toISOString();
+}
+
+function intersectUserFilter(
+  current: unknown,
+  departmentUsernames: string[],
+): { empty: boolean; value?: unknown } {
+  if (!current) return { empty: false };
+  if (typeof current === 'string') {
+    return departmentUsernames.includes(current)
+      ? { empty: false, value: current }
+      : { empty: true };
+  }
+  if (typeof current === 'object' && current !== null) {
+    const maybeIn = (current as Record<string, unknown>).$in;
+    if (Array.isArray(maybeIn)) {
+      const allowed = maybeIn.filter((u) => typeof u === 'string' && departmentUsernames.includes(u));
+      if (allowed.length === 0) return { empty: true };
+      return { empty: false, value: allowed.length === 1 ? allowed[0] : { $in: allowed } };
+    }
+  }
+  return { empty: false, value: current };
+}
+
 export async function collectActivity(req: Request, res: Response) {
   const body = z
     .object({ events: z.array(z.union([NewEventShape, OldEventShape])) })
@@ -232,7 +261,8 @@ export async function listActivity(req: Request, res: Response) {
       if (departmentUsernames.length > 0) {
         // If username filter is already set, intersect with department users
         if (filter.username) {
-          if (!departmentUsernames.includes(filter.username as string)) {
+          const intersected = intersectUserFilter(filter.username, departmentUsernames);
+          if (intersected.empty) {
             // User is not in this department, return empty results
             return res.json({
               items: [],
@@ -248,6 +278,9 @@ export async function listActivity(req: Request, res: Response) {
                 averageDuration: 0,
               },
             });
+          }
+          if (intersected.value !== undefined) {
+            filter.username = intersected.value as any;
           }
         } else {
           // Filter by all users in this department
@@ -466,9 +499,7 @@ export async function listActivity(req: Request, res: Response) {
   // map DB schema to frontend ActivityItem shape
   const items = slicedEvents.map((e: any) => ({
     _id: (e as any)._id,
-    time:
-      (e.timestamp as any)?.toISOString?.() ||
-      new Date(e.timestamp as any).toISOString(),
+    time: (e.timestamp as any)?.toISOString?.() || toIsoOrEpoch(e.timestamp as any),
     username: e.username as any,
     displayName: usernameToDisplayName.get(e.username as any),
     department: userToDeptName.get(e.username as any),

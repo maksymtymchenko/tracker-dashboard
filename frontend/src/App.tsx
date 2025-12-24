@@ -12,7 +12,7 @@ import { DepartmentAnalytics } from 'src/components/DepartmentAnalytics';
 import { UserDetailsModal } from 'src/components/UserDetailsModal';
 import { UserScreenshotsModal } from 'src/components/UserScreenshotsModal';
 import { DepartmentUserList } from 'src/components/DepartmentUserList';
-import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, fetchDepartmentsAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout, getUsersByDepartment } from 'src/api/client';
+import { authStatus, fetchActivity, fetchScreenshots, fetchSummary, fetchTopDomains, fetchUsersAnalytics, fetchDepartmentsAnalytics, listDistinctUsers, login as apiLogin, logout as apiLogout, getUsersByDepartment, API_BASE_URL } from 'src/api/client';
 import { ActivityItem, Paginated, SummaryResponse, ScreenshotItem, AuthUser, TopDomainItem, UserAggregateItem, DepartmentAnalytics as DepartmentAnalyticsType } from 'src/types';
 
 function App(): JSX.Element {
@@ -439,8 +439,16 @@ function App(): JSX.Element {
             <ActivityFilters
               value={filters}
               onChange={(f) => setFilters(f)}
-              onExportCSV={() => window.open('/api/export/csv', '_blank')}
-              onExportJSON={() => window.open('/api/export/json', '_blank')}
+              onExportCSV={() => {
+                const base = API_BASE_URL || '';
+                const url = `${base.replace(/\/$/, '')}/api/export/csv`;
+                window.open(url, '_blank');
+              }}
+              onExportJSON={() => {
+                const base = API_BASE_URL || '';
+                const url = `${base.replace(/\/$/, '')}/api/export/json`;
+                window.open(url, '_blank');
+              }}
               onRefresh={loadActivity}
               loading={activityLoading}
               usersOptions={filteredUsersOptions}
@@ -495,4 +503,3 @@ function App(): JSX.Element {
 }
 
 export default App;
-

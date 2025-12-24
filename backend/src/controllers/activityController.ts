@@ -48,6 +48,11 @@ export async function collectActivity(req: Request, res: Response) {
     return res
       .status(400)
       .json({ error: 'invalid payload', issues: body.error.issues });
+  const maxEventsRaw = Number(process.env.COLLECTOR_MAX_EVENTS || 1000);
+  const maxEvents = Number.isFinite(maxEventsRaw) ? Math.max(1, maxEventsRaw) : 1000;
+  if (body.data.events.length > maxEvents) {
+    return res.status(413).json({ error: 'too many events in batch' });
+  }
   const docs = await EventModel.insertMany(
     body.data.events.map((e) => {
       if ('time' in e) {

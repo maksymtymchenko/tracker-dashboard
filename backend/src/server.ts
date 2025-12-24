@@ -22,6 +22,7 @@ const __dirname = path.dirname(__filename);
 validateEnvironment();
 
 const app = express();
+app.disable('x-powered-by');
 
 // Configure CORS before Helmet to ensure headers are set correctly
 const isProduction = process.env.NODE_ENV === 'production';
@@ -107,6 +108,35 @@ if (process.env.MONGO_URI) {
   }
 }
 app.use(session(sessionOptions));
+
+// Basic CSRF/origin check for cookie-authenticated unsafe requests
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+  if (!unsafeMethods.has(req.method)) return next();
+  if (!req.session?.user) return next();
+
+  const originHeader = req.headers.origin;
+  const refererHeader = req.headers.referer;
+  const origin = originHeader || refererHeader;
+  if (!origin) {
+    return res.status(403).json({ error: 'CSRF check failed' });
+  }
+
+  if (allowedOrigins === true) return next();
+  if (Array.isArray(allowedOrigins) && allowedOrigins.length > 0) {
+    try {
+      const originUrl = new URL(origin);
+      const originValue = originHeader ? originHeader : originUrl.origin;
+      if (allowedOrigins.includes(originValue)) {
+        return next();
+      }
+    } catch {
+      // fall through to deny
+    }
+  }
+
+  return res.status(403).json({ error: 'CSRF check failed' });
+});
 
 // Screenshots are now served exclusively from Cloudflare R2
 // No local filesystem storage or static file serving

@@ -13,10 +13,12 @@ const UserSchema = new Schema(
     displayName: { type: String, index: true },
     createdAt: { type: Date, default: Date.now },
     lastLogin: { type: Date },
+    failedLoginCount: { type: Number, default: 0 },
+    lastFailedLogin: { type: Date },
+    lockedUntil: { type: Date },
   },
   { versionKey: false },
 );
 
 export type User = InferSchemaType<typeof UserSchema>;
 export const UserModel = model('User', UserSchema);
-

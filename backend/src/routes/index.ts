@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { requireAdmin, requireAuth } from '../middleware/auth.js';
+import { requireAdmin, requireAuth, requireCollectorToken } from '../middleware/auth.js';
 import { UserModel } from '../models/User.js';
 import { verifyPassword } from '../utils/auth.js';
-import { loginRateLimiter, strictRateLimiter } from '../middleware/rateLimiter.js';
+import { loginRateLimiter, loginUserRateLimiter, strictRateLimiter } from '../middleware/rateLimiter.js';
 import { logSecurityEvent, SecurityEventType } from '../middleware/securityLogger.js';
 import {
   collectActivity,
@@ -51,7 +51,7 @@ import { EventModel } from '../models/Event.js';
 const router = Router();
 
 // Authentication
-router.post('/api/login', loginRateLimiter, async (req: Request, res: Response) => {
+router.post('/api/login', loginRateLimiter, loginUserRateLimiter, async (req: Request, res: Response) => {
   const { username, password } = req.body as {
     username?: string;
     password?: string;
@@ -66,8 +66,33 @@ router.post('/api/login', loginRateLimiter, async (req: Request, res: Response) 
     }, req);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+  if ((user as any).lockedUntil && new Date((user as any).lockedUntil).getTime() > Date.now()) {
+    logSecurityEvent(SecurityEventType.LOGIN_FAILURE, {
+      username,
+      reason: 'account_locked',
+    }, req);
+    return res.status(423).json({ error: 'Account locked. Please try again later.' });
+  }
   const ok = await verifyPassword(password, user.password);
   if (!ok) {
+    const maxFailedRaw = Number(process.env.MAX_FAILED_LOGINS || 5);
+    const lockMinutesRaw = Number(process.env.LOCKOUT_MINUTES || 15);
+    const maxFailed = Number.isFinite(maxFailedRaw) ? Math.max(1, maxFailedRaw) : 5;
+    const lockMinutes = Number.isFinite(lockMinutesRaw) ? Math.max(1, lockMinutesRaw) : 15;
+    const nextFailed = ((user as any).failedLoginCount || 0) + 1;
+    const updates: Record<string, unknown> = {
+      $set: { lastFailedLogin: new Date() },
+      $inc: { failedLoginCount: 1 },
+    };
+    if (nextFailed >= maxFailed) {
+      updates.$set = {
+        ...(updates.$set as Record<string, unknown>),
+        lockedUntil: new Date(Date.now() + lockMinutes * 60 * 1000),
+      };
+    }
+    UserModel.updateOne({ _id: user._id }, updates).catch((err) => {
+      console.error('Failed to update failedLoginCount:', err);
+    });
     logSecurityEvent(SecurityEventType.LOGIN_FAILURE, {
       username,
       reason: 'invalid_password',
@@ -87,7 +112,7 @@ router.post('/api/login', loginRateLimiter, async (req: Request, res: Response) 
     
     UserModel.updateOne(
       { _id: user._id },
-      { $set: { lastLogin: new Date() } },
+      { $set: { lastLogin: new Date(), failedLoginCount: 0, lastFailedLogin: null, lockedUntil: null } },
     ).catch((err) => console.error('Failed to update lastLogin:', err));
     
     logSecurityEvent(SecurityEventType.LOGIN_SUCCESS, {
@@ -130,16 +155,16 @@ router.get('/api/auth/status', (req: Request, res: Response) => {
 });
 
 // Activity Collection
-router.post('/collect-activity', collectActivity);
+router.post('/collect-activity', requireCollectorToken, collectActivity);
 
-router.post('/collect-tracking', (req: Request, res: Response) => {
+router.post('/collect-tracking', requireCollectorToken, (req: Request, res: Response) => {
   const { events } = req.body as any;
   if (!events || !Array.isArray(events))
     return res.status(400).json({ error: 'events array required' });
   return res.json({ success: true, count: events.length });
 });
 
-router.post('/collect-screenshot', collectScreenshot);
+router.post('/collect-screenshot', requireCollectorToken, collectScreenshot);
 
 // Analytics and Activity
 router.get('/api/activity', requireAuth, listActivity);

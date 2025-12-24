@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon --watch src --ext ts,tsx --exec \"tsx src/server.ts\"",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "migrate:backfill-users": "tsx src/scripts/backfillUserLoginFields.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.662.0",

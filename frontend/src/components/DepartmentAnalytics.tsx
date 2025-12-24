@@ -42,9 +42,10 @@ export function DepartmentAnalytics({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [pieHoverIndex, setPieHoverIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showAllCards, setShowAllCards] = useState(false);
   const [maxChartItems] = useState(15); // Limit departments shown in charts
-  const [cardsPerPage] = useState(12); // Number of cards to show initially
+  const [pageSize, setPageSize] = useState(12);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [filterMode, setFilterMode] = useState<'all' | 'active' | 'users' | 'domains'>('all');
   const [cardViewMode, setCardViewMode] = useState<'cards' | 'list'>('cards');
   const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(new Set());
   const [departmentUsers, setDepartmentUsers] = useState<Map<string, DepartmentUserAnalytics[]>>(new Map());
@@ -208,6 +209,15 @@ export function DepartmentAnalytics({
         dept.name.toLowerCase().includes(query)
       );
     }
+
+    // Apply filter mode
+    if (filterMode === 'active') {
+      filtered = filtered.filter((dept) => dept.events > 0);
+    } else if (filterMode === 'users') {
+      filtered = filtered.filter((dept) => dept.userCount > 0);
+    } else if (filterMode === 'domains') {
+      filtered = filtered.filter((dept) => dept.uniqueDomains > 0);
+    }
     
     // Sort by current view mode
     filtered.sort((a, b) => {
@@ -217,7 +227,16 @@ export function DepartmentAnalytics({
     });
     
     return filtered;
-  }, [data, searchQuery, viewMode]);
+  }, [data, searchQuery, viewMode, filterMode]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterMode, viewMode, data.length, cardViewMode]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pageEnd = pageStart + pageSize;
 
   // Prepare chart data (limit to top N for better visualization)
   const chartData = useMemo(() => {
@@ -251,11 +270,8 @@ export function DepartmentAnalytics({
   
   // Prepare cards data (with pagination)
   const displayedCards = useMemo(() => {
-    if (showAllCards) return filteredData;
-    return filteredData.slice(0, cardsPerPage);
-  }, [filteredData, showAllCards, cardsPerPage]);
-  
-  const hasMoreCards = filteredData.length > cardsPerPage;
+    return filteredData.slice(pageStart, pageEnd);
+  }, [filteredData, pageStart, pageEnd]);
 
   const getYAxisLabel = () => {
     if (viewMode === 'events') return 'Events';
@@ -308,6 +324,16 @@ export function DepartmentAnalytics({
             onChange={(e) => setSearchQuery(e.target.value)}
             className="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent min-w-[150px] flex-1 sm:flex-initial"
           />
+          <select
+            className="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
+            value={filterMode}
+            onChange={(e) => setFilterMode(e.target.value as any)}
+          >
+            <option value="all">All Departments</option>
+            <option value="active">With Events</option>
+            <option value="users">With Users</option>
+            <option value="domains">With Domains</option>
+          </select>
           {selectedDepartment && (
             <button
               onClick={() => {
@@ -652,7 +678,7 @@ export function DepartmentAnalytics({
                 {/* View Mode Toggle */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Departments ({displayedCards.length})
+                    Departments ({filteredData.length})
                   </div>
               <div className="flex rounded border border-gray-300 dark:border-gray-700 overflow-hidden">
                 <button
@@ -951,19 +977,40 @@ export function DepartmentAnalytics({
               </div>
             )}
             
-            {/* Show More/Less Button */}
-            {hasMoreCards && (
-              <div className="mt-4 flex justify-center">
-                <button
-                  onClick={() => setShowAllCards(!showAllCards)}
-                  className="text-sm px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Showing {filteredData.length === 0 ? 0 : pageStart + 1}-{Math.min(pageEnd, filteredData.length)} of {filteredData.length}
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  className="text-xs px-2 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
                 >
-                  {showAllCards 
-                    ? `Show Less (${cardsPerPage} of ${filteredData.length})` 
-                    : `Show More (${filteredData.length - cardsPerPage} more)`}
+                  <option value={6}>6 / page</option>
+                  <option value={12}>12 / page</option>
+                  <option value={24}>24 / page</option>
+                  <option value={48}>48 / page</option>
+                </select>
+                <button
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                >
+                  Prev
+                </button>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Page {safePage} / {totalPages}
+                </div>
+                <button
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                >
+                  Next
                 </button>
               </div>
-            )}
+            </div>
             
             {/* Chart limit notice */}
             {filteredData.length > maxChartItems && (
@@ -979,4 +1026,3 @@ export function DepartmentAnalytics({
     </div>
   );
 }
-

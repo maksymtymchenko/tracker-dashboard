@@ -24,7 +24,8 @@ export const loginUserRateLimiter = rateLimit({
   skipSuccessfulRequests: true,
   keyGenerator: (req) => {
     const username = typeof req.body?.username === 'string' ? req.body.username : '';
-    return username ? `user:${username.toLowerCase()}` : `ip:${ipKeyGenerator(req)}`;
+    const ip = req.ip || '';
+    return username ? `user:${username.toLowerCase()}` : `ip:${ipKeyGenerator(ip)}`;
   },
 });
 

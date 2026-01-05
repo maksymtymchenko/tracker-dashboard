@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ScreenshotItem } from 'src/types';
 import { deleteScreenshot, bulkDeleteScreenshots, fetchScreenshots } from 'src/api/client';
 
@@ -46,6 +46,10 @@ export function Screenshots({
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef({ startX: 0, startY: 0, clientX: 0, clientY: 0 });
   
   // Use external search query if provided, otherwise use local one
   const searchQuery = externalSearchQuery !== undefined 
@@ -150,6 +154,10 @@ export function Screenshots({
   useEffect(() => {
     if (!open) return;
 
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setIsPanning(false);
+
     const scrollY = window.scrollY;
     const body = document.body;
     const html = document.documentElement;
@@ -212,6 +220,21 @@ export function Screenshots({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, processedItems, processedAllScreenshots, showViewAll]);
+
+  const handleZoomIn = () => setZoom((z) => Math.min(3, Number((z + 0.2).toFixed(2))));
+  const handleZoomOut = () => {
+    setZoom((z) => {
+      const next = Math.max(1, Number((z - 0.2).toFixed(2)));
+      if (next === 1) {
+        setPan({ x: 0, y: 0 });
+      }
+      return next;
+    });
+  };
+  const handleZoomReset = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
 
   const handleDelete = async (filename: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -616,12 +639,68 @@ export function Screenshots({
           <div
             className="relative max-w-7xl w-[95vw] h-[95vh] bg-black/90 rounded-xl overflow-hidden shadow-2xl border border-white/10"
             onClick={(e) => e.stopPropagation()}
+            onWheel={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.deltaY < 0) {
+                handleZoomIn();
+              } else {
+                handleZoomOut();
+              }
+            }}
+            onMouseMove={(e) => {
+              if (!isPanning) return;
+              setPan({
+                x: panStartRef.current.startX + (e.clientX - panStartRef.current.clientX),
+                y: panStartRef.current.startY + (e.clientY - panStartRef.current.clientY),
+              });
+            }}
+            onMouseUp={() => setIsPanning(false)}
+            onMouseLeave={() => setIsPanning(false)}
+            onTouchMove={(e) => {
+              if (!isPanning || e.touches.length !== 1) return;
+              const touch = e.touches[0];
+              setPan({
+                x: panStartRef.current.startX + (touch.clientX - panStartRef.current.clientX),
+                y: panStartRef.current.startY + (touch.clientY - panStartRef.current.clientY),
+              });
+            }}
+            onTouchEnd={() => setIsPanning(false)}
           >
-            <img
-              src={currentScreenshot.url || `/screenshots/${currentScreenshot.filename}`}
-              alt={currentScreenshot.filename}
-              className="w-full h-full object-contain"
-            />
+            <div
+              className={`w-full h-full flex items-center justify-center ${
+                zoom > 1 ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'
+              }`}
+              onMouseDown={(e) => {
+                if (zoom <= 1) return;
+                e.preventDefault();
+                setIsPanning(true);
+                panStartRef.current = {
+                  startX: pan.x,
+                  startY: pan.y,
+                  clientX: e.clientX,
+                  clientY: e.clientY,
+                };
+              }}
+              onTouchStart={(e) => {
+                if (zoom <= 1 || e.touches.length !== 1) return;
+                const touch = e.touches[0];
+                setIsPanning(true);
+                panStartRef.current = {
+                  startX: pan.x,
+                  startY: pan.y,
+                  clientX: touch.clientX,
+                  clientY: touch.clientY,
+                };
+              }}
+            >
+              <img
+                src={currentScreenshot.url || `/screenshots/${currentScreenshot.filename}`}
+                alt={currentScreenshot.filename}
+                className="max-w-full max-h-full object-contain transition-transform duration-150"
+                style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+              />
+            </div>
 
             {/* Navigation Arrows */}
             {navigationItems.length > 1 && (
@@ -691,6 +770,35 @@ export function Screenshots({
 
             {/* Top Controls */}
             <div className="absolute top-4 right-4 flex gap-2">
+              <div className="flex gap-1 bg-black/40 rounded-lg p-1">
+                <button
+                  className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 text-white text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleZoomOut();
+                  }}
+                >
+                  −
+                </button>
+                <button
+                  className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 text-white text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleZoomReset();
+                  }}
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <button
+                  className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 text-white text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleZoomIn();
+                  }}
+                >
+                  +
+                </button>
+              </div>
               {isAdmin && (
                 <button
                   className="px-4 py-2 rounded-lg bg-red-600/90 hover:bg-red-600 text-white shadow-lg backdrop-blur-sm transition-all flex items-center gap-2 text-sm font-medium"

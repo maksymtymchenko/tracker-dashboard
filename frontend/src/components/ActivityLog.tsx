@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ActivityItem, Paginated } from 'src/types';
 import { fetchScreenshots } from 'src/api/client';
 
@@ -42,6 +42,10 @@ export function ActivityLog({
   const [screenshotOpen, setScreenshotOpen] = useState<string | null>(null);
   const [screenshotItems, setScreenshotItems] = useState<Array<{ filename: string; url?: string; username: string; domain?: string; mtime?: number }>>([]);
   const [loadingScreenshot, setLoadingScreenshot] = useState<string | null>(null);
+  const [screenshotZoom, setScreenshotZoom] = useState(1);
+  const [screenshotPan, setScreenshotPan] = useState({ x: 0, y: 0 });
+  const [isScreenshotPanning, setIsScreenshotPanning] = useState(false);
+  const screenshotPanStartRef = useRef({ startX: 0, startY: 0, clientX: 0, clientY: 0 });
 
   // Disable body scroll when modal is open
   useEffect(() => {
@@ -58,6 +62,14 @@ export function ActivityLog({
       document.documentElement.style.overflow = originalHtmlOverflow;
     };
   }, [open]);
+
+  useEffect(() => {
+    if (screenshotOpen) {
+      setScreenshotZoom(1);
+      setScreenshotPan({ x: 0, y: 0 });
+      setIsScreenshotPanning(false);
+    }
+  }, [screenshotOpen]);
 
   const formatDuration = (ms: number): string => {
     if (!Number.isFinite(ms) || ms < 0) return String(ms);
@@ -1161,28 +1173,103 @@ export function ActivityLog({
         const currentIndex = screenshotItems.findIndex((s) => s.filename === screenshotOpen);
         
         if (!currentScreenshot) return null;
+
+        const handleZoomIn = () => setScreenshotZoom((z) => Math.min(3, Number((z + 0.2).toFixed(2))));
+        const handleZoomOut = () => {
+          setScreenshotZoom((z) => {
+            const next = Math.max(1, Number((z - 0.2).toFixed(2)));
+            if (next === 1) {
+              setScreenshotPan({ x: 0, y: 0 });
+            }
+            return next;
+          });
+        };
+        const handleZoomReset = () => {
+          setScreenshotZoom(1);
+          setScreenshotPan({ x: 0, y: 0 });
+        };
         
         return (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center"
-            onClick={() => setScreenshotOpen(null)}
+            onClick={() => {
+              setScreenshotOpen(null);
+              setScreenshotZoom(1);
+              setScreenshotPan({ x: 0, y: 0 });
+            }}
           >
             <div className="absolute inset-0 bg-black/80" />
             <div
               className="relative max-w-7xl w-[95vw] h-[95vh] bg-black/90 rounded-xl overflow-hidden shadow-2xl border border-white/10"
               onClick={(e) => e.stopPropagation()}
+              onWheel={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.deltaY < 0) {
+                  handleZoomIn();
+                } else {
+                  handleZoomOut();
+                }
+              }}
+              onMouseMove={(e) => {
+                if (!isScreenshotPanning) return;
+                setScreenshotPan({
+                  x: screenshotPanStartRef.current.startX + (e.clientX - screenshotPanStartRef.current.clientX),
+                  y: screenshotPanStartRef.current.startY + (e.clientY - screenshotPanStartRef.current.clientY),
+                });
+              }}
+              onMouseUp={() => setIsScreenshotPanning(false)}
+              onMouseLeave={() => setIsScreenshotPanning(false)}
+              onTouchMove={(e) => {
+                if (!isScreenshotPanning || e.touches.length !== 1) return;
+                const touch = e.touches[0];
+                setScreenshotPan({
+                  x: screenshotPanStartRef.current.startX + (touch.clientX - screenshotPanStartRef.current.clientX),
+                  y: screenshotPanStartRef.current.startY + (touch.clientY - screenshotPanStartRef.current.clientY),
+                });
+              }}
+              onTouchEnd={() => setIsScreenshotPanning(false)}
             >
-              <img
-                src={currentScreenshot.url || `/screenshots/${currentScreenshot.filename}`}
-                alt={currentScreenshot.filename}
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  if (currentScreenshot.url && currentScreenshot.url !== `/screenshots/${currentScreenshot.filename}`) {
-                    target.src = `/screenshots/${currentScreenshot.filename}`;
-                  }
+              <div
+                className={`w-full h-full flex items-center justify-center ${
+                  screenshotZoom > 1 ? (isScreenshotPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'
+                }`}
+                onMouseDown={(e) => {
+                  if (screenshotZoom <= 1) return;
+                  e.preventDefault();
+                  setIsScreenshotPanning(true);
+                  screenshotPanStartRef.current = {
+                    startX: screenshotPan.x,
+                    startY: screenshotPan.y,
+                    clientX: e.clientX,
+                    clientY: e.clientY,
+                  };
                 }}
-              />
+                onTouchStart={(e) => {
+                  if (screenshotZoom <= 1 || e.touches.length !== 1) return;
+                  const touch = e.touches[0];
+                  setIsScreenshotPanning(true);
+                  screenshotPanStartRef.current = {
+                    startX: screenshotPan.x,
+                    startY: screenshotPan.y,
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                  };
+                }}
+              >
+                <img
+                  src={currentScreenshot.url || `/screenshots/${currentScreenshot.filename}`}
+                  alt={currentScreenshot.filename}
+                  className="max-w-full max-h-full object-contain transition-transform duration-150"
+                  style={{ transform: `translate(${screenshotPan.x}px, ${screenshotPan.y}px) scale(${screenshotZoom})` }}
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    if (currentScreenshot.url && currentScreenshot.url !== `/screenshots/${currentScreenshot.filename}`) {
+                      target.src = `/screenshots/${currentScreenshot.filename}`;
+                    }
+                  }}
+                />
+              </div>
 
               {/* Navigation Arrows */}
               {screenshotItems.length > 1 && (
@@ -1248,6 +1335,50 @@ export function ActivityLog({
                   onClick={(e) => {
                     e.stopPropagation();
                     setScreenshotOpen(null);
+                  }}
+                >
+                  Close (Esc)
+                </button>
+              </div>
+
+              {/* Top Controls */}
+              <div className="absolute top-4 right-4 flex gap-2">
+                <div className="flex gap-1 bg-black/40 rounded-lg p-1">
+                  <button
+                    className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 text-white text-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleZoomOut();
+                    }}
+                  >
+                    −
+                  </button>
+                  <button
+                    className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 text-white text-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleZoomReset();
+                    }}
+                  >
+                    {Math.round(screenshotZoom * 100)}%
+                  </button>
+                  <button
+                    className="px-3 py-2 rounded bg-white/20 hover:bg-white/30 text-white text-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleZoomIn();
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
+                <button
+                  className="px-4 py-2 rounded bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setScreenshotOpen(null);
+                    setScreenshotZoom(1);
+                    setScreenshotPan({ x: 0, y: 0 });
                   }}
                 >
                   Close (Esc)

@@ -146,19 +146,40 @@ export function Screenshots({
     return filtered;
   }, [allScreenshots, searchQuery, sortBy]);
 
-  // Disable body scroll when lightbox is open
+  // Disable body scroll when lightbox is open and preserve scroll position
   useEffect(() => {
     if (!open) return;
 
-    const originalBodyOverflow = document.body.style.overflow;
-    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const html = document.documentElement;
+    const originalBodyStyles = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+    };
+    const originalHtmlOverflow = html.style.overflow;
 
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    html.style.overflow = 'hidden';
 
     return () => {
-      document.body.style.overflow = originalBodyOverflow;
-      document.documentElement.style.overflow = originalHtmlOverflow;
+      body.style.overflow = originalBodyStyles.overflow;
+      body.style.position = originalBodyStyles.position;
+      body.style.top = originalBodyStyles.top;
+      body.style.left = originalBodyStyles.left;
+      body.style.right = originalBodyStyles.right;
+      body.style.width = originalBodyStyles.width;
+      html.style.overflow = originalHtmlOverflow;
+      window.scrollTo(0, scrollY);
     };
   }, [open]);
 

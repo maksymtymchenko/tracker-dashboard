@@ -120,6 +120,35 @@ function App(): JSX.Element {
     }
   }, []);
 
+  const loadUsersOptions = useCallback(async () => {
+    try {
+      setUsersOptions(await listDistinctUsers());
+    } catch {
+      setUsersOptions([]);
+    }
+  }, []);
+
+  const loadDeptAnalytics = useCallback(async () => {
+    setDeptAnalyticsError(undefined);
+    setDeptAnalyticsLoading(true);
+    try {
+      const depts = await fetchDepartmentsAnalytics();
+      // Prioritize Analytics department - move it to the top
+      const sorted = [...depts].sort((a, b) => {
+        const aIsAnalytics = a.name.toLowerCase() === 'analytics';
+        const bIsAnalytics = b.name.toLowerCase() === 'analytics';
+        if (aIsAnalytics && !bIsAnalytics) return -1;
+        if (!aIsAnalytics && bIsAnalytics) return 1;
+        return b.events - a.events; // Sort by events descending
+      });
+      setDeptAnalytics(sorted);
+    } catch (e: unknown) {
+      setDeptAnalyticsError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setDeptAnalyticsLoading(false);
+    }
+  }, []);
+
   const loadActivity = useCallback(async () => {
     setActivityError(undefined);
     setActivityLoading(true);
@@ -193,6 +222,17 @@ function App(): JSX.Element {
     }
   }, [shotsPage, shotsLimit, shotsUser, filters]);
 
+  const handleRefresh = useCallback(() => {
+    loadActivity();
+    loadScreenshots();
+  }, [loadActivity, loadScreenshots]);
+
+  const handleDepartmentsClose = useCallback(() => {
+    setShowDepartments(false);
+    loadUsersOptions();
+    loadDeptAnalytics();
+  }, [loadUsersOptions, loadDeptAnalytics]);
+
   // Reset activity page to 1 when filters change
   useEffect(() => {
     if (user) {
@@ -211,13 +251,7 @@ function App(): JSX.Element {
   useEffect(() => {
     if (!user) return;
     loadSummary();
-    (async () => {
-      try {
-        setUsersOptions(await listDistinctUsers());
-      } catch {
-        setUsersOptions([]);
-      }
-    })();
+    loadUsersOptions();
     (async () => {
       setTopDomainsError(undefined);
       setTopDomainsLoading(true);
@@ -240,27 +274,8 @@ function App(): JSX.Element {
         setUsersAggLoading(false);
       }
     })();
-    (async () => {
-      setDeptAnalyticsError(undefined);
-      setDeptAnalyticsLoading(true);
-      try {
-        const depts = await fetchDepartmentsAnalytics();
-        // Prioritize Analytics department - move it to the top
-        const sorted = [...depts].sort((a, b) => {
-          const aIsAnalytics = a.name.toLowerCase() === 'analytics';
-          const bIsAnalytics = b.name.toLowerCase() === 'analytics';
-          if (aIsAnalytics && !bIsAnalytics) return -1;
-          if (!aIsAnalytics && bIsAnalytics) return 1;
-          return b.events - a.events; // Sort by events descending
-        });
-        setDeptAnalytics(sorted);
-      } catch (e: unknown) {
-        setDeptAnalyticsError(e instanceof Error ? e.message : 'Failed to load');
-      } finally {
-        setDeptAnalyticsLoading(false);
-      }
-    })();
-  }, [user, loadSummary]);
+    loadDeptAnalytics();
+  }, [user, loadSummary, loadUsersOptions, loadDeptAnalytics]);
 
   // Load activity when filters or page changes
   useEffect(() => {
@@ -470,7 +485,7 @@ function App(): JSX.Element {
                 const url = `${base.replace(/\/$/, '')}/api/export/json`;
                 window.open(url, '_blank');
               }}
-              onRefresh={loadActivity}
+              onRefresh={handleRefresh}
               loading={activityLoading}
               usersOptions={filteredUsersOptions}
               displayNames={displayNames}
@@ -496,7 +511,7 @@ function App(): JSX.Element {
               items={shots}
               loading={shotsLoading}
               error={shotsError}
-              onRefresh={loadScreenshots}
+              onRefresh={handleRefresh}
               page={shotsPage}
               limit={shotsLimit}
               total={shotsTotal}
@@ -517,7 +532,7 @@ function App(): JSX.Element {
 
         </main>
         <Suspense fallback={null}>
-          <DepartmentsModal open={showDepartments} onClose={() => setShowDepartments(false)} />
+          <DepartmentsModal open={showDepartments} onClose={handleDepartmentsClose} />
         </Suspense>
         <Suspense fallback={null}>
           <AdminUsers open={showUsers} onClose={() => setShowUsers(false)} canManage={user?.role === 'ADMIN' || user?.role === 'admin'} />

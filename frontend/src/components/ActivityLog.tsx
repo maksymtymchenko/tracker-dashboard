@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { ActivityItem, Paginated } from 'src/types';
 import { fetchScreenshots } from 'src/api/client';
 
@@ -46,6 +46,10 @@ export function ActivityLog({
   const [screenshotPan, setScreenshotPan] = useState({ x: 0, y: 0 });
   const [isScreenshotPanning, setIsScreenshotPanning] = useState(false);
   const screenshotPanStartRef = useRef({ startX: 0, startY: 0, clientX: 0, clientY: 0 });
+  const screenshotContainerRef = useRef<HTMLDivElement | null>(null);
+  const screenshotImageRef = useRef<HTMLImageElement | null>(null);
+  const [screenshotContainerSize, setScreenshotContainerSize] = useState({ width: 0, height: 0 });
+  const [screenshotImageSize, setScreenshotImageSize] = useState({ width: 0, height: 0 });
 
   // Disable body scroll when modal is open
   useEffect(() => {
@@ -68,8 +72,55 @@ export function ActivityLog({
       setScreenshotZoom(1);
       setScreenshotPan({ x: 0, y: 0 });
       setIsScreenshotPanning(false);
+      setScreenshotImageSize({ width: 0, height: 0 });
     }
   }, [screenshotOpen]);
+
+  useEffect(() => {
+    if (!screenshotOpen) return;
+    const container = screenshotContainerRef.current;
+    if (!container) return;
+
+    const updateSize = () => {
+      setScreenshotContainerSize({ width: container.clientWidth, height: container.clientHeight });
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => updateSize());
+      resizeObserver.observe(container);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      resizeObserver?.disconnect();
+    };
+  }, [screenshotOpen]);
+
+  const clampScreenshotPan = useCallback((nextPan: { x: number; y: number }, zoomValue = screenshotZoom) => {
+    const { width: containerWidth, height: containerHeight } = screenshotContainerSize;
+    const { width: imgWidth, height: imgHeight } = screenshotImageSize;
+    if (!containerWidth || !containerHeight || !imgWidth || !imgHeight) return nextPan;
+
+    const fitScale = Math.min(containerWidth / imgWidth, containerHeight / imgHeight);
+    const scaledWidth = imgWidth * fitScale * zoomValue;
+    const scaledHeight = imgHeight * fitScale * zoomValue;
+    const maxX = Math.max(0, (scaledWidth - containerWidth) / 2);
+    const maxY = Math.max(0, (scaledHeight - containerHeight) / 2);
+
+    return {
+      x: Math.max(-maxX, Math.min(maxX, nextPan.x)),
+      y: Math.max(-maxY, Math.min(maxY, nextPan.y)),
+    };
+  }, [screenshotContainerSize, screenshotImageSize, screenshotZoom]);
+
+  useEffect(() => {
+    if (!screenshotOpen) return;
+    setScreenshotPan((prev) => clampScreenshotPan(prev, screenshotZoom));
+  }, [screenshotOpen, screenshotZoom, screenshotContainerSize, screenshotImageSize, clampScreenshotPan]);
 
   const formatDuration = (ms: number): string => {
     if (!Number.isFinite(ms) || ms < 0) return String(ms);
@@ -253,7 +304,44 @@ export function ActivityLog({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setScreenshotOpen(null);
-      } else if (e.key === 'ArrowLeft') {
+        return;
+      }
+
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        setScreenshotZoom((z) => Math.min(3, Number((z + 0.2).toFixed(2))));
+        return;
+      }
+
+      if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        setScreenshotZoom((z) => {
+          const next = Math.max(1, Number((z - 0.2).toFixed(2)));
+          if (next === 1) {
+            setScreenshotPan({ x: 0, y: 0 });
+          }
+          return next;
+        });
+        return;
+      }
+
+      if (e.key === '0') {
+        e.preventDefault();
+        setScreenshotZoom(1);
+        setScreenshotPan({ x: 0, y: 0 });
+        return;
+      }
+
+      if (screenshotZoom > 1 && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        const step = 40;
+        const dx = e.key === 'ArrowLeft' ? step : e.key === 'ArrowRight' ? -step : 0;
+        const dy = e.key === 'ArrowUp' ? step : e.key === 'ArrowDown' ? -step : 0;
+        setScreenshotPan((prev) => clampScreenshotPan({ x: prev.x + dx, y: prev.y + dy }, screenshotZoom));
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
         const currentIdx = screenshotItems.findIndex((s) => s.filename === screenshotOpen);
         if (currentIdx > 0) {
           setScreenshotOpen(screenshotItems[currentIdx - 1].filename);
@@ -268,7 +356,7 @@ export function ActivityLog({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [screenshotOpen, screenshotItems]);
+  }, [screenshotOpen, screenshotItems, screenshotZoom, clampScreenshotPan]);
 
   const renderDetailValue = (key: string, value: unknown): JSX.Element => {
     if (key === 'url' && typeof value === 'string') {
@@ -1201,6 +1289,7 @@ export function ActivityLog({
             <div className="absolute inset-0 bg-black/80" />
             <div
               className="relative max-w-7xl w-[95vw] h-[95vh] bg-black/90 rounded-xl overflow-hidden shadow-2xl border border-white/10"
+              ref={screenshotContainerRef}
               onClick={(e) => e.stopPropagation()}
               onWheel={(e) => {
                 e.preventDefault();
@@ -1213,20 +1302,24 @@ export function ActivityLog({
               }}
               onMouseMove={(e) => {
                 if (!isScreenshotPanning) return;
-                setScreenshotPan({
-                  x: screenshotPanStartRef.current.startX + (e.clientX - screenshotPanStartRef.current.clientX),
-                  y: screenshotPanStartRef.current.startY + (e.clientY - screenshotPanStartRef.current.clientY),
-                });
+                setScreenshotPan(
+                  clampScreenshotPan({
+                    x: screenshotPanStartRef.current.startX + (e.clientX - screenshotPanStartRef.current.clientX),
+                    y: screenshotPanStartRef.current.startY + (e.clientY - screenshotPanStartRef.current.clientY),
+                  }, screenshotZoom),
+                );
               }}
               onMouseUp={() => setIsScreenshotPanning(false)}
               onMouseLeave={() => setIsScreenshotPanning(false)}
               onTouchMove={(e) => {
                 if (!isScreenshotPanning || e.touches.length !== 1) return;
                 const touch = e.touches[0];
-                setScreenshotPan({
-                  x: screenshotPanStartRef.current.startX + (touch.clientX - screenshotPanStartRef.current.clientX),
-                  y: screenshotPanStartRef.current.startY + (touch.clientY - screenshotPanStartRef.current.clientY),
-                });
+                setScreenshotPan(
+                  clampScreenshotPan({
+                    x: screenshotPanStartRef.current.startX + (touch.clientX - screenshotPanStartRef.current.clientX),
+                    y: screenshotPanStartRef.current.startY + (touch.clientY - screenshotPanStartRef.current.clientY),
+                  }, screenshotZoom),
+                );
               }}
               onTouchEnd={() => setIsScreenshotPanning(false)}
             >
@@ -1258,6 +1351,7 @@ export function ActivityLog({
                 }}
               >
                 <img
+                  ref={screenshotImageRef}
                   src={currentScreenshot.url || `/screenshots/${currentScreenshot.filename}`}
                   alt={currentScreenshot.filename}
                   className="max-w-full max-h-full object-contain transition-transform duration-150"
@@ -1267,6 +1361,10 @@ export function ActivityLog({
                     if (currentScreenshot.url && currentScreenshot.url !== `/screenshots/${currentScreenshot.filename}`) {
                       target.src = `/screenshots/${currentScreenshot.filename}`;
                     }
+                  }}
+                  onLoad={(e) => {
+                    const target = e.currentTarget;
+                    setScreenshotImageSize({ width: target.naturalWidth, height: target.naturalHeight });
                   }}
                 />
               </div>

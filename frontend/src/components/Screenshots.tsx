@@ -50,6 +50,10 @@ export function Screenshots({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef({ startX: 0, startY: 0, clientX: 0, clientY: 0 });
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   
   // Use external search query if provided, otherwise use local one
   const searchQuery = externalSearchQuery !== undefined 
@@ -157,6 +161,7 @@ export function Screenshots({
     setZoom(1);
     setPan({ x: 0, y: 0 });
     setIsPanning(false);
+    setImageSize({ width: 0, height: 0 });
 
     const scrollY = window.scrollY;
     const body = document.body;
@@ -191,6 +196,71 @@ export function Screenshots({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateSize = () => {
+      setContainerSize({ width: container.clientWidth, height: container.clientHeight });
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => updateSize());
+      resizeObserver.observe(container);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      resizeObserver?.disconnect();
+    };
+  }, [open]);
+
+  const clampPan = useCallback((nextPan: { x: number; y: number }, zoomValue = zoom) => {
+    const { width: containerWidth, height: containerHeight } = containerSize;
+    const { width: imgWidth, height: imgHeight } = imageSize;
+    if (!containerWidth || !containerHeight || !imgWidth || !imgHeight) return nextPan;
+
+    const fitScale = Math.min(containerWidth / imgWidth, containerHeight / imgHeight);
+    const scaledWidth = imgWidth * fitScale * zoomValue;
+    const scaledHeight = imgHeight * fitScale * zoomValue;
+    const maxX = Math.max(0, (scaledWidth - containerWidth) / 2);
+    const maxY = Math.max(0, (scaledHeight - containerHeight) / 2);
+
+    return {
+      x: Math.max(-maxX, Math.min(maxX, nextPan.x)),
+      y: Math.max(-maxY, Math.min(maxY, nextPan.y)),
+    };
+  }, [containerSize, imageSize, zoom]);
+
+  useEffect(() => {
+    if (!open) return;
+    setPan((prev) => clampPan(prev, zoom));
+  }, [open, zoom, containerSize, imageSize, clampPan]);
+
+  const handleZoomIn = useCallback(() => {
+    setZoom((z) => Math.min(3, Number((z + 0.2).toFixed(2))));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom((z) => {
+      const next = Math.max(1, Number((z - 0.2).toFixed(2)));
+      if (next === 1) {
+        setPan({ x: 0, y: 0 });
+      }
+      return next;
+    });
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
   // Keyboard navigation in lightbox
   useEffect(() => {
     if (!open) return;
@@ -198,7 +268,37 @@ export function Screenshots({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setOpen(null);
-      } else if (e.key === 'ArrowLeft') {
+        return;
+      }
+
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        handleZoomIn();
+        return;
+      }
+
+      if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        handleZoomOut();
+        return;
+      }
+
+      if (e.key === '0') {
+        e.preventDefault();
+        handleZoomReset();
+        return;
+      }
+
+      if (zoom > 1 && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        const step = 40;
+        const dx = e.key === 'ArrowLeft' ? step : e.key === 'ArrowRight' ? -step : 0;
+        const dy = e.key === 'ArrowUp' ? step : e.key === 'ArrowDown' ? -step : 0;
+        setPan((prev) => clampPan({ x: prev.x + dx, y: prev.y + dy }, zoom));
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
         const items = showViewAll && processedAllScreenshots.length > 0 
           ? processedAllScreenshots 
           : processedItems;
@@ -219,22 +319,7 @@ export function Screenshots({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, processedItems, processedAllScreenshots, showViewAll]);
-
-  const handleZoomIn = () => setZoom((z) => Math.min(3, Number((z + 0.2).toFixed(2))));
-  const handleZoomOut = () => {
-    setZoom((z) => {
-      const next = Math.max(1, Number((z - 0.2).toFixed(2)));
-      if (next === 1) {
-        setPan({ x: 0, y: 0 });
-      }
-      return next;
-    });
-  };
-  const handleZoomReset = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  };
+  }, [open, processedItems, processedAllScreenshots, showViewAll, zoom, clampPan, handleZoomIn, handleZoomOut, handleZoomReset]);
 
   const handleDelete = async (filename: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -631,6 +716,7 @@ export function Screenshots({
           />
           <div
             className="relative max-w-7xl w-[95vw] h-[95vh] bg-black/90 rounded-xl overflow-hidden shadow-2xl border border-white/10"
+            ref={containerRef}
             onClick={(e) => e.stopPropagation()}
             onWheel={(e) => {
               e.preventDefault();
@@ -643,20 +729,24 @@ export function Screenshots({
             }}
             onMouseMove={(e) => {
               if (!isPanning) return;
-              setPan({
-                x: panStartRef.current.startX + (e.clientX - panStartRef.current.clientX),
-                y: panStartRef.current.startY + (e.clientY - panStartRef.current.clientY),
-              });
+              setPan(
+                clampPan({
+                  x: panStartRef.current.startX + (e.clientX - panStartRef.current.clientX),
+                  y: panStartRef.current.startY + (e.clientY - panStartRef.current.clientY),
+                }, zoom),
+              );
             }}
             onMouseUp={() => setIsPanning(false)}
             onMouseLeave={() => setIsPanning(false)}
             onTouchMove={(e) => {
               if (!isPanning || e.touches.length !== 1) return;
               const touch = e.touches[0];
-              setPan({
-                x: panStartRef.current.startX + (touch.clientX - panStartRef.current.clientX),
-                y: panStartRef.current.startY + (touch.clientY - panStartRef.current.clientY),
-              });
+              setPan(
+                clampPan({
+                  x: panStartRef.current.startX + (touch.clientX - panStartRef.current.clientX),
+                  y: panStartRef.current.startY + (touch.clientY - panStartRef.current.clientY),
+                }, zoom),
+              );
             }}
             onTouchEnd={() => setIsPanning(false)}
           >
@@ -688,10 +778,15 @@ export function Screenshots({
               }}
             >
               <img
+                ref={imageRef}
                 src={currentScreenshot.url || `/screenshots/${currentScreenshot.filename}`}
                 alt={currentScreenshot.filename}
                 className="max-w-full max-h-full object-contain transition-transform duration-150"
                 style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+                onLoad={(e) => {
+                  const target = e.currentTarget;
+                  setImageSize({ width: target.naturalWidth, height: target.naturalHeight });
+                }}
               />
             </div>
 

@@ -312,12 +312,15 @@ function App(): JSX.Element {
 
   // Filter usersAgg by selected department
   const filteredUsersAgg = useMemo(() => {
-    if (!selectedDepartment || departmentUsers.length === 0) {
+    if (!selectedDepartment) {
       return usersAgg;
+    }
+    if (departmentUsersLoading || departmentUsers.length === 0) {
+      return [];
     }
     const deptUsersSet = new Set(departmentUsers);
     return usersAgg.filter((user) => deptUsersSet.has(user.username));
-  }, [usersAgg, departmentUsers, selectedDepartment]);
+  }, [usersAgg, departmentUsers, selectedDepartment, departmentUsersLoading]);
 
   // Filter usersOptions by selected department
   const filteredUsersOptions = useMemo(() => {

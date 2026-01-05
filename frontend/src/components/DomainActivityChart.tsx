@@ -105,6 +105,10 @@ export function DomainActivityChart({ data, loading, error, onUserClick, departm
       <div className="h-72">
         {loading ? (
           <div className="h-full flex items-center justify-center text-gray-400">Loading…</div>
+        ) : data.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+            {departmentName ? 'No users found in this department' : 'No user activity available'}
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data} margin={{ left: 12, right: 12, bottom: 12, top: 12 }} barCategoryGap="20%">
@@ -172,5 +176,4 @@ export function DomainActivityChart({ data, loading, error, onUserClick, departm
     </div>
   );
 }
-
 

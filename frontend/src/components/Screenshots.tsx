@@ -21,6 +21,7 @@ interface Props {
   searchQuery?: string;
   /** Optional map of username -> display name for showing real names */
   displayNames?: Record<string, string>;
+  onNotify?(message: string, tone?: 'info' | 'success' | 'error'): void;
 }
 
 export function Screenshots({
@@ -38,6 +39,7 @@ export function Screenshots({
   userRole,
   searchQuery: externalSearchQuery,
   displayNames,
+  onNotify,
 }: Props): JSX.Element {
   const [open, setOpen] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -335,9 +337,10 @@ export function Screenshots({
       await bulkDeleteScreenshots(Array.from(selected));
       setSelected(new Set());
       onRefresh();
+      onNotify?.(`Deleted ${selected.size} screenshot(s).`, 'success');
     } catch (e: unknown) {
       console.error('Failed to delete screenshots:', e);
-      alert(e instanceof Error ? e.message : 'Failed to delete screenshots');
+      onNotify?.(e instanceof Error ? e.message : 'Failed to delete screenshots', 'error');
     } finally {
       setDeleting(false);
     }
@@ -356,9 +359,10 @@ export function Screenshots({
         return next;
       });
       onRefresh();
+      onNotify?.('Screenshot deleted.', 'success');
     } catch (e: unknown) {
       console.error('Failed to delete screenshot:', e);
-      alert(e instanceof Error ? e.message : 'Failed to delete screenshot');
+      onNotify?.(e instanceof Error ? e.message : 'Failed to delete screenshot', 'error');
     } finally {
       setDeleting(false);
     }

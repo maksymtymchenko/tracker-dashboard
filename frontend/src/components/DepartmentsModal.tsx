@@ -34,6 +34,7 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
   const [filterDept, setFilterDept] = useState<string>('');
   const [quickAssignUser, setQuickAssignUser] = useState<string | null>(null);
   const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
+  const [confirmDeleteDept, setConfirmDeleteDept] = useState<string | null>(null);
 
   const usernameToDeptIds = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -80,6 +81,7 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
 
   useEffect(() => {
     if (open) load();
+    if (!open) setConfirmDeleteDept(null);
   }, [open]);
 
   // Disable body scroll when modal is open
@@ -125,12 +127,18 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
   };
 
   const remove = async (id: string) => {
+    if (confirmDeleteDept !== id) {
+      setConfirmDeleteDept(id);
+      return;
+    }
     setLoading(true);
     try {
       await apiDeleteDepartment(id);
       await load();
+      setConfirmDeleteDept(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to delete');
+      setConfirmDeleteDept(null);
     } finally {
       setLoading(false);
     }
@@ -234,7 +242,22 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
                         <td className="py-2 px-2">{d.description || '—'}</td>
                         <td className="py-2 px-2 text-right space-x-2">
                           <button className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => edit(d)}>Edit</button>
-                          <button className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700" onClick={() => remove(d._id)}>Delete</button>
+                          <button
+                            className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700"
+                            onClick={() => remove(d._id)}
+                            disabled={loading}
+                          >
+                            {confirmDeleteDept === d._id ? 'Confirm Delete' : 'Delete'}
+                          </button>
+                          {confirmDeleteDept === d._id && (
+                            <button
+                              className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700"
+                              onClick={() => setConfirmDeleteDept(null)}
+                              disabled={loading}
+                            >
+                              Cancel
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -419,5 +442,3 @@ export function DepartmentsModal({ open, onClose }: Props): JSX.Element | null {
     </div>
   );
 }
-
-

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo, Suspense } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef, Suspense } from 'react';
 import { Header } from 'src/components/Header';
 import { KpiCards } from 'src/components/KpiCards';
 import { ActivityLog } from 'src/components/ActivityLog';
@@ -28,6 +28,50 @@ const UserDetailsModal = React.lazy(() =>
 const UserScreenshotsModal = React.lazy(() =>
   import('src/components/UserScreenshotsModal').then((module) => ({ default: module.UserScreenshotsModal })),
 );
+
+type ToastTone = 'info' | 'success' | 'error';
+
+type ToastItem = {
+  id: number;
+  message: string;
+  tone: ToastTone;
+};
+
+function ToastStack({
+  items,
+  onDismiss,
+}: {
+  items: ToastItem[];
+  onDismiss(id: number): void;
+}): JSX.Element | null {
+  if (items.length === 0) return null;
+
+  const toneClasses: Record<ToastTone, string> = {
+    info: 'border-blue-200 text-blue-700 bg-blue-50 dark:border-blue-900/60 dark:text-blue-200 dark:bg-blue-950/60',
+    success: 'border-green-200 text-green-700 bg-green-50 dark:border-green-900/60 dark:text-green-200 dark:bg-green-950/60',
+    error: 'border-red-200 text-red-700 bg-red-50 dark:border-red-900/60 dark:text-red-200 dark:bg-red-950/60',
+  };
+
+  return (
+    <div className="fixed right-4 bottom-4 z-[70] space-y-2 w-[320px] max-w-[90vw]">
+      {items.map((toast) => (
+        <div
+          key={toast.id}
+          className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-lg ${toneClasses[toast.tone]}`}
+        >
+          <div className="text-sm leading-snug whitespace-pre-line">{toast.message}</div>
+          <button
+            className="ml-auto text-xs opacity-70 hover:opacity-100"
+            onClick={() => onDismiss(toast.id)}
+            aria-label="Dismiss notification"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function App(): JSX.Element {
   // Load theme from localStorage, default to dark mode
@@ -78,6 +122,8 @@ function App(): JSX.Element {
   const [departmentActivityPage, setDepartmentActivityPage] = useState(1);
   const [departmentUsers, setDepartmentUsers] = useState<string[]>([]);
   const [departmentUsersLoading, setDepartmentUsersLoading] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const toastIdRef = useRef(0);
 
   const displayNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -232,6 +278,18 @@ function App(): JSX.Element {
     loadUsersOptions();
     loadDeptAnalytics();
   }, [loadUsersOptions, loadDeptAnalytics]);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
+  const notify = useCallback((message: string, tone: ToastTone = 'info') => {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, message, tone }]);
+    window.setTimeout(() => {
+      dismissToast(id);
+    }, 4000);
+  }, [dismissToast]);
 
   // Reset activity page to 1 when filters change
   useEffect(() => {
@@ -502,6 +560,7 @@ function App(): JSX.Element {
                   setFilters({ ...filters, user: username });
                 }}
                 searchQuery={filters.search || ''}
+                onNotify={notify}
               />
             </div>
           </section>
@@ -527,6 +586,7 @@ function App(): JSX.Element {
               userRole={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'}
               searchQuery={filters.search}
               displayNames={displayNames}
+              onNotify={notify}
             />
           </Suspense>
 
@@ -535,7 +595,12 @@ function App(): JSX.Element {
           <DepartmentsModal open={showDepartments} onClose={handleDepartmentsClose} />
         </Suspense>
         <Suspense fallback={null}>
-          <AdminUsers open={showUsers} onClose={() => setShowUsers(false)} canManage={user?.role === 'ADMIN' || user?.role === 'admin'} />
+          <AdminUsers
+            open={showUsers}
+            onClose={() => setShowUsers(false)}
+            canManage={user?.role === 'ADMIN' || user?.role === 'admin'}
+            onNotify={notify}
+          />
         </Suspense>
         <Suspense fallback={null}>
           <UserDetailsModal username={selectedUser} onClose={() => setSelectedUser(null)} />
@@ -543,6 +608,7 @@ function App(): JSX.Element {
         <Suspense fallback={null}>
           <UserScreenshotsModal username={selectedUserScreenshots} onClose={() => setSelectedUserScreenshots(null)} />
         </Suspense>
+        <ToastStack items={toasts} onDismiss={dismissToast} />
       </div>
     </div>
   );

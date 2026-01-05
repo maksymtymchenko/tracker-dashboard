@@ -15,6 +15,7 @@ interface Props {
   searchQuery?: string;
   defaultSortByDuration?: boolean;
   defaultSortByUser?: boolean;
+  onNotify?(message: string, tone?: 'info' | 'success' | 'error'): void;
 }
 
 export function ActivityLog({
@@ -26,6 +27,7 @@ export function ActivityLog({
   searchQuery: externalSearchQuery = '',
   defaultSortByDuration = false,
   defaultSortByUser = false,
+  onNotify,
 }: Props): JSX.Element {
   const [open, setOpen] = useState<ActivityItem | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -635,13 +637,9 @@ export function ActivityLog({
       setScreenshotItems(allScreenshots);
       setScreenshotOpen(screenshot.filename);
     } else {
-      // Show a more helpful error message
-      alert(
-        'Screenshot not found. This may happen if:\n' +
-        '- The screenshot was deleted\n' +
-        '- The screenshot was taken more than 30 minutes before/after this event\n' +
-        '- The screenshot is not associated with this user\n\n' +
-        'Try checking the Screenshots section for this user.'
+      onNotify?.(
+        'Screenshot not found. It may have been deleted, outside the time range, or not associated with this user.',
+        'error',
       );
     }
   };

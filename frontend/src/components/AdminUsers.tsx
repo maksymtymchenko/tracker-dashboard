@@ -6,9 +6,10 @@ interface Props {
   open: boolean;
   onClose(): void;
   canManage: boolean;
+  onNotify?(message: string, tone?: 'info' | 'success' | 'error'): void;
 }
 
-export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | null {
+export function AdminUsers({ open, onClose, canManage, onNotify }: Props): JSX.Element | null {
   const [users, setUsers] = useState<BasicUser[]>([]);
   const [usernames, setUsernames] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -16,6 +17,9 @@ export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | n
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   const load = async () => {
     if (!canManage) return;
@@ -37,7 +41,9 @@ export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | n
       setUsers(adminUsers);
       setPage(1);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load users');
+      const message = e instanceof Error ? e.message : 'Failed to load users';
+      setError(message);
+      onNotify?.(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -46,6 +52,11 @@ export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | n
   useEffect(() => {
     if (open && canManage) {
       load();
+    }
+    if (!open) {
+      setConfirmDeleteUser(null);
+      setEditingUser(null);
+      setEditingValue('');
     }
   }, [open, canManage]);
 
@@ -135,8 +146,11 @@ export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | n
                       try {
                         await adminDeleteUserAllData(uname);
                         await load();
+                        onNotify?.(`Deleted data for ${uname}.`, 'success');
                       } catch (e) {
-                        setError(e instanceof Error ? e.message : 'Failed to delete user data');
+                        const message = e instanceof Error ? e.message : 'Failed to delete user data';
+                        setError(message);
+                        onNotify?.(message, 'error');
                       } finally {
                         setLoading(false);
                       }
@@ -144,51 +158,107 @@ export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | n
                   >
                     Delete Data
                   </button>
+                  {editingUser === uname ? (
+                    <>
+                      <input
+                        className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        placeholder="Display name"
+                      />
+                      <button
+                        className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
+                        onClick={async () => {
+                          const value = editingValue.trim();
+                          setLoading(true);
+                          try {
+                            if (adminUser?._id) {
+                              await updateUser(adminUser._id, { displayName: value || undefined });
+                            } else if (value) {
+                              await setUserDisplayNameByUsername(uname, value);
+                            } else {
+                              onNotify?.('Display name cannot be empty for this user.', 'error');
+                              setLoading(false);
+                              return;
+                            }
+                            await load();
+                            onNotify?.(`Updated display name for ${uname}.`, 'success');
+                            setEditingUser(null);
+                            setEditingValue('');
+                          } catch (e) {
+                            const message = e instanceof Error ? e.message : 'Failed to update display name';
+                            setError(message);
+                            onNotify?.(message, 'error');
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                        disabled={loading}
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
+                        onClick={() => {
+                          setEditingUser(null);
+                          setEditingValue('');
+                        }}
+                        disabled={loading}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
+                      onClick={() => {
+                        const current = adminUser?.displayName || '';
+                        setEditingUser(uname);
+                        setEditingValue(current);
+                      }}
+                    >
+                      Set Name
+                    </button>
+                  )}
                   <button
                     className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
                     onClick={async () => {
-                      const current = adminUser?.displayName || '';
-                      const next = window.prompt(`Set display name for ${uname}`, current);
-                      if (next === null) return;
-                      const value = next.trim();
-                      setLoading(true);
-                      try {
-                        if (adminUser?._id) {
-                          await updateUser(adminUser._id, { displayName: value || undefined });
-                        } else if (value) {
-                          await setUserDisplayNameByUsername(uname, value);
-                        }
-                        await load();
-                      } catch (e) {
-                        setError(e instanceof Error ? e.message : 'Failed to update display name');
-                      } finally {
-                        setLoading(false);
+                      if (confirmDeleteUser !== uname) {
+                        setConfirmDeleteUser(uname);
+                        return;
                       }
-                    }}
-                  >
-                    Set Name
-                  </button>
-                  <button
-                    className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
-                    onClick={async () => {
-                      if (!confirm(`Delete user ${uname}?`)) return;
                       if (!adminUser?._id) {
-                        setError('No account found for this username. Use "Delete Data" to remove activity/screenshots.');
+                        const message = 'No account found for this username. Use "Delete Data" to remove activity/screenshots.';
+                        setError(message);
+                        onNotify?.(message, 'error');
+                        setConfirmDeleteUser(null);
                         return;
                       }
                       setLoading(true);
                       try {
                         await deleteUserById(adminUser._id);
                         await load();
+                        onNotify?.(`Deleted user ${uname}.`, 'success');
                       } catch (e) {
-                        setError(e instanceof Error ? e.message : 'Failed to delete user');
+                        const message = e instanceof Error ? e.message : 'Failed to delete user';
+                        setError(message);
+                        onNotify?.(message, 'error');
                       } finally {
                         setLoading(false);
+                        setConfirmDeleteUser(null);
                       }
                     }}
                   >
-                    Delete User
+                    {confirmDeleteUser === uname ? 'Confirm Delete' : 'Delete User'}
                   </button>
+                  {confirmDeleteUser === uname && (
+                    <button
+                      className="text-xs px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600"
+                      onClick={() => setConfirmDeleteUser(null)}
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </td>
               </tr>
             )})}
@@ -229,5 +299,3 @@ export function AdminUsers({ open, onClose, canManage }: Props): JSX.Element | n
     </div>
   );
 }
-
-

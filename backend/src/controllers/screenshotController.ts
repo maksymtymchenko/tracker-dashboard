@@ -15,6 +15,8 @@ const CollectSchema = z.object({
   platform: z.string().optional(),
 });
 
+const SCREENSHOT_RETENTION_DAYS = 21;
+
 /**
  * Extract just the filename from a path (handles Windows/Unix paths)
  */
@@ -31,6 +33,28 @@ function extractFilename(pathOrFilename: string): string {
   }
   // If no path separators, assume it's already just a filename
   return pathOrFilename;
+}
+
+export async function cleanupOldScreenshots(): Promise<void> {
+  const cutoff = new Date(Date.now() - SCREENSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const oldShots = await ScreenshotModel.find({ mtime: { $lt: cutoff } }, { filename: 1 }).limit(500).lean();
+  if (oldShots.length === 0) return;
+
+  const filenames = oldShots.map((s: any) => extractFilename(s.filename || ''));
+  if (r2Storage.isConfigured()) {
+    await Promise.allSettled(
+      filenames.map(async (name) => {
+        if (!name) return;
+        try {
+          await r2Storage.deleteFile(name);
+        } catch (error) {
+          console.error(`Failed to delete old screenshot from R2: ${name}`, error);
+        }
+      }),
+    );
+  }
+
+  await ScreenshotModel.deleteMany({ _id: { $in: oldShots.map((s: any) => s._id) } });
 }
 
 function intersectUserFilter(
@@ -84,6 +108,10 @@ export async function collectScreenshot(req: Request, res: Response) {
   }
 
   await ScreenshotModel.create({ filename, url, mtime: new Date(), domain, username: username || 'unknown', deviceId });
+
+  cleanupOldScreenshots().catch((error) => {
+    console.error('Failed to cleanup old screenshots:', error);
+  });
 
   return res.json({ saved: filename, ok: true });
 }

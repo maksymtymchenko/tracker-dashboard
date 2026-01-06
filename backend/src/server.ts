@@ -8,6 +8,7 @@ import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import router from './routes/index.js';
+import { cleanupOldScreenshots } from './controllers/screenshotController.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { connectToDatabase } from './utils/db.js';
 import { ensureDefaultAdmin } from './utils/auth.js';
@@ -167,6 +168,17 @@ async function start() {
     /* eslint-disable no-console */
     console.log(`API server listening on http://localhost:${PORT}`);
   });
+
+  const cleanup = async () => {
+    try {
+      await cleanupOldScreenshots();
+    } catch (error) {
+      console.error('Daily screenshot cleanup failed:', error);
+    }
+  };
+
+  cleanup();
+  setInterval(cleanup, 24 * 60 * 60 * 1000);
 }
 
 start();

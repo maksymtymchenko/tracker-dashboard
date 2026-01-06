@@ -6,6 +6,53 @@ import { ScreenshotModel } from '../models/Screenshot.js';
 import { UserModel } from '../models/User.js';
 import { UserProfileModel } from '../models/UserProfile.js';
 
+const getTimeRangeStart = (timeRange?: string): Date | null => {
+  if (!timeRange || timeRange === 'all') return null;
+  if (timeRange !== 'today' && timeRange !== 'week' && timeRange !== 'month') return null;
+  const now = new Date();
+  const start = new Date();
+  if (timeRange === 'today') {
+    start.setHours(0, 0, 0, 0);
+  } else if (timeRange === 'week') {
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    start.setDate(diff);
+    start.setHours(0, 0, 0, 0);
+  } else if (timeRange === 'month') {
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+  }
+  return start;
+};
+
+const parseIsoDate = (value?: string, isEnd?: boolean): Date | null => {
+  if (!value) return null;
+  const parts = value.split('-').map((part) => Number(part));
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return null;
+  const [year, month, day] = parts;
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return null;
+  if (isEnd) {
+    date.setHours(23, 59, 59, 999);
+  } else {
+    date.setHours(0, 0, 0, 0);
+  }
+  return date;
+};
+
+const getDateRangeFromQuery = (req: Request): { start?: Date; end?: Date } => {
+  const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+  const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
+  const parsedStart = parseIsoDate(startDate, false);
+  const parsedEnd = parseIsoDate(endDate, true);
+  if (parsedStart || parsedEnd) {
+    return { start: parsedStart || undefined, end: parsedEnd || undefined };
+  }
+  const timeRange = typeof req.query.timeRange === 'string' ? req.query.timeRange : undefined;
+  const start = getTimeRangeStart(timeRange);
+  return start ? { start } : {};
+};
+
 export async function listDepartments(_req: Request, res: Response) {
   const items = await DepartmentModel.find().lean();
   const departments = items.map((d) => ({ id: String((d as any)._id), name: d.name, color: d.color, description: d.description }));
@@ -110,6 +157,14 @@ export async function departmentStats(req: Request, res: Response) {
 }
 
 export async function allDepartmentsAnalytics(req: Request, res: Response) {
+  const { start, end } = getDateRangeFromQuery(req);
+  const eventMatch: Record<string, unknown> = {};
+  if (start || end) {
+    eventMatch.timestamp = {
+      ...(start ? { $gte: start } : {}),
+      ...(end ? { $lte: end } : {}),
+    };
+  }
   // Get all departments with their users
   const [departments, userDepartments] = await Promise.all([
     DepartmentModel.find().lean(),
@@ -131,7 +186,7 @@ export async function allDepartmentsAnalytics(req: Request, res: Response) {
 
   // Aggregate events by username
   const eventsByUser = await EventModel.aggregate([
-    { $match: { username: { $in: allUsernames } } },
+    { $match: { username: { $in: allUsernames }, ...eventMatch } },
     {
       $group: {
         _id: '$username',
@@ -163,7 +218,7 @@ export async function allDepartmentsAnalytics(req: Request, res: Response) {
 
   // Get unique domains by username
   const domainsByUser = await EventModel.aggregate([
-    { $match: { username: { $in: allUsernames }, domain: { $ne: null } } },
+    { $match: { username: { $in: allUsernames }, domain: { $ne: null }, ...eventMatch } },
     { $group: { _id: { username: '$username', domain: '$domain' } } },
     { $group: { _id: '$_id.username', domains: { $addToSet: '$_id.domain' } } },
     { $project: { username: '$_id', _id: 0, domains: 1 } },
@@ -245,6 +300,14 @@ export async function importDepartments(req: Request, res: Response) {
  */
 export async function departmentUsersAnalytics(req: Request, res: Response) {
   const { id } = req.params;
+  const { start, end } = getDateRangeFromQuery(req);
+  const eventMatch: Record<string, unknown> = {};
+  if (start || end) {
+    eventMatch.timestamp = {
+      ...(start ? { $gte: start } : {}),
+      ...(end ? { $lte: end } : {}),
+    };
+  }
   
   // Get users in this department
   const userDepts = await UserDepartmentModel.find({ departmentId: id }).lean();
@@ -273,7 +336,7 @@ export async function departmentUsersAnalytics(req: Request, res: Response) {
 
   // Aggregate events by username with basic metrics
   const eventsByUser = await EventModel.aggregate([
-    { $match: { username: { $in: usernames } } },
+    { $match: { username: { $in: usernames }, ...eventMatch } },
     {
       $group: {
         _id: '$username',
@@ -295,7 +358,7 @@ export async function departmentUsersAnalytics(req: Request, res: Response) {
 
   // Get unique applications and websites from events (simpler approach)
   const eventsWithApps = await EventModel.find(
-    { username: { $in: usernames } },
+    { username: { $in: usernames }, ...eventMatch },
     { username: 1, domain: 1, data: 1 },
   ).lean();
 
@@ -343,7 +406,14 @@ export async function departmentUsersAnalytics(req: Request, res: Response) {
 
   // Count screenshots per user
   const screenshotCounts = await ScreenshotModel.aggregate([
-    { $match: { username: { $in: usernames } } },
+    {
+      $match: {
+        username: { $in: usernames },
+        ...(start || end
+          ? { mtime: { ...(start ? { $gte: start } : {}), ...(end ? { $lte: end } : {}) } }
+          : {}),
+      },
+    },
     {
       $group: {
         _id: '$username',
@@ -422,5 +492,3 @@ export async function departmentUsersAnalytics(req: Request, res: Response) {
 
   return res.json({ users });
 }
-
-

@@ -12,8 +12,10 @@ interface Props {
   onMetricChange?(metric: 'events' | 'duration' | 'users'): void;
   selectedDepartment?: { id: string; name: string } | null;
   filters?: { timeRange?: 'all' | 'today' | 'week' | 'month'; search?: string; domain?: string; type?: string };
+  dateRange?: { start?: string; end?: string };
   onUserClick?(username: string): void;
   onUserScreenshotsClick?(username: string): void;
+  onDateRangeChange?(range: { start?: string; end?: string }): void;
 }
 
 export function DepartmentAnalytics({
@@ -25,8 +27,10 @@ export function DepartmentAnalytics({
   onMetricChange,
   selectedDepartment,
   filters = {},
+  dateRange,
   onUserClick,
   onUserScreenshotsClick,
+  onDateRangeChange,
 }: Props): JSX.Element {
   const [internalMetric, setInternalMetric] = useState<'events' | 'duration' | 'users'>('events');
   const viewMode = externalMetric !== undefined ? externalMetric : internalMetric;
@@ -51,6 +55,90 @@ export function DepartmentAnalytics({
   const [departmentUsers, setDepartmentUsers] = useState<Map<string, DepartmentUserAnalytics[]>>(new Map());
   const [departmentUsersLoading, setDepartmentUsersLoading] = useState<Map<string, boolean>>(new Map());
   const [departmentUsersError, setDepartmentUsersError] = useState<Map<string, string>>(new Map());
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const [draftRange, setDraftRange] = useState<{ start?: string; end?: string }>({});
+
+  const toIsoDate = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const parseIsoDate = (value?: string): Date | null => {
+    if (!value) return null;
+    const [y, m, d] = value.split('-').map((v) => Number(v));
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+    return new Date(y, m - 1, d);
+  };
+
+  const formatRangeDate = (value?: string): string => {
+    const date = parseIsoDate(value);
+    if (!date) return '';
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const startIso = dateRange?.start;
+  const endIso = dateRange?.end;
+  const draftStart = draftRange.start;
+  const draftEnd = draftRange.end;
+  const rangeLabel = startIso
+    ? `${formatRangeDate(startIso)}${endIso ? ` – ${formatRangeDate(endIso)}` : ' – ...'}`
+    : 'Select dates';
+
+  const calendarDays = useMemo(() => {
+    const year = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const offset = (firstDay.getDay() + 6) % 7; // Monday start
+    const start = new Date(year, month, 1 - offset);
+    return Array.from({ length: 42 }, (_, idx) => {
+      const day = new Date(start);
+      day.setDate(start.getDate() + idx);
+      return day;
+    });
+  }, [calendarMonth]);
+
+  const isInRange = (iso: string): boolean => {
+    if (!draftStart || !draftEnd) return false;
+    return iso >= draftStart && iso <= draftEnd;
+  };
+
+  const handleDaySelect = (day: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (day.getTime() > today.getTime()) return;
+
+    const iso = toIsoDate(day);
+    if (!draftStart || draftEnd) {
+      setDraftRange({ start: iso, end: undefined });
+      return;
+    }
+    if (iso < draftStart) {
+      setDraftRange({ start: iso, end: draftStart });
+    } else {
+      setDraftRange({ start: draftStart, end: iso });
+    }
+  };
+
+  useEffect(() => {
+    if (calendarOpen) {
+      setDraftRange({ start: startIso, end: endIso });
+    }
+  }, [calendarOpen, startIso, endIso]);
+
+  const rangeParams = useMemo(() => {
+    if (dateRange?.start || dateRange?.end) {
+      return { startDate: dateRange.start, endDate: dateRange.end };
+    }
+    return undefined;
+  }, [dateRange?.start, dateRange?.end]);
+
+  useEffect(() => {
+    const base = parseIsoDate(dateRange?.start) || new Date();
+    setCalendarMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+  }, [dateRange?.start]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -75,8 +163,8 @@ export function DepartmentAnalytics({
 
     const loadSelectedDepartmentUsers = async () => {
       const departmentId = selectedDepartment.id;
-      // Check if already loading or loaded
-      if (departmentUsersLoading.get(departmentId) || departmentUsers.has(departmentId)) {
+      // Avoid duplicate requests while one is in-flight
+      if (departmentUsersLoading.get(departmentId)) {
         return;
       }
 
@@ -88,7 +176,7 @@ export function DepartmentAnalytics({
       });
 
       try {
-        const users = await fetchDepartmentUsersAnalytics(departmentId);
+        const users = await fetchDepartmentUsersAnalytics(departmentId, rangeParams);
         setDepartmentUsers((prev) => new Map(prev).set(departmentId, users));
       } catch (e: unknown) {
         setDepartmentUsersError((prev) => {
@@ -106,7 +194,7 @@ export function DepartmentAnalytics({
     };
 
     loadSelectedDepartmentUsers();
-  }, [selectedDepartment]);
+  }, [selectedDepartment, rangeParams]);
 
   // Load department users analytics when department is expanded and viewMode is 'users'
   useEffect(() => {
@@ -114,11 +202,6 @@ export function DepartmentAnalytics({
       // Check if already loading
       if (departmentUsersLoading.get(departmentId)) {
         return;
-      }
-
-      // Only load if not already loaded or if viewMode is 'users'
-      if (departmentUsers.has(departmentId) && viewMode === 'users') {
-        return; // Already loaded
       }
 
       setDepartmentUsersLoading((prev) => new Map(prev).set(departmentId, true));
@@ -129,7 +212,7 @@ export function DepartmentAnalytics({
       });
 
       try {
-        const users = await fetchDepartmentUsersAnalytics(departmentId);
+        const users = await fetchDepartmentUsersAnalytics(departmentId, rangeParams);
         setDepartmentUsers((prev) => new Map(prev).set(departmentId, users));
       } catch (e: unknown) {
         setDepartmentUsersError((prev) => {
@@ -152,7 +235,13 @@ export function DepartmentAnalytics({
         loadDepartmentUsers(deptId);
       });
     }
-  }, [expandedDepartments, viewMode]);
+  }, [expandedDepartments, viewMode, rangeParams]);
+
+  useEffect(() => {
+    setDepartmentUsers(new Map());
+    setDepartmentUsersLoading(new Map());
+    setDepartmentUsersError(new Map());
+  }, [rangeParams]);
 
   const formatDuration = (ms: number): string => {
     if (ms < 1000) return `${Math.round(ms)} ms`;
@@ -316,6 +405,121 @@ export function DepartmentAnalytics({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <button
+              className="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent hover:border-gray-400 dark:hover:border-gray-600"
+              onClick={() => setCalendarOpen((v) => !v)}
+              type="button"
+            >
+              {rangeLabel}
+            </button>
+            {calendarOpen && (
+              <div className="absolute right-0 mt-2 w-72 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-lg p-3 z-50">
+                <div className="flex items-center justify-between mb-2">
+                  <button
+                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+                    onClick={() =>
+                      setCalendarMonth(
+                        new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1),
+                      )
+                    }
+                    type="button"
+                  >
+                    ‹
+                  </button>
+                  <div className="text-sm font-medium">
+                    {calendarMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                  </div>
+                  <button
+                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+                    onClick={() =>
+                      setCalendarMonth(
+                        new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1),
+                      )
+                    }
+                    type="button"
+                  >
+                    ›
+                  </button>
+                </div>
+                <div className="grid grid-cols-7 text-[10px] text-gray-500 dark:text-gray-400 mb-1">
+                  {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => (
+                    <div key={d} className="text-center py-1">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {calendarDays.map((day) => {
+                    const iso = toIsoDate(day);
+                    const isCurrentMonth = day.getMonth() === calendarMonth.getMonth();
+                    const isStart = draftStart === iso;
+                    const isEnd = draftEnd === iso;
+                    const isRange = isInRange(iso);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const isFuture = day.getTime() > today.getTime();
+                    const baseClasses = isCurrentMonth
+                      ? 'text-gray-900 dark:text-gray-100'
+                      : 'text-gray-400 dark:text-gray-600';
+                    const rangeClasses = isRange ? 'bg-blue-100 dark:bg-blue-900/40' : '';
+                    const edgeClasses = isStart || isEnd
+                      ? 'bg-blue-600 text-white dark:text-white'
+                      : '';
+                    return (
+                      <button
+                        key={iso}
+                        type="button"
+                        className={`text-xs h-8 rounded-md ${baseClasses} ${rangeClasses} ${edgeClasses} ${isFuture ? 'opacity-40 cursor-not-allowed' : ''}`}
+                        onClick={() => handleDaySelect(day)}
+                        disabled={isFuture}
+                      >
+                        {day.getDate()}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between mt-3">
+                  <button
+                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+                    onClick={() => {
+                      const todayIso = toIsoDate(new Date());
+                      setDraftRange({ start: todayIso, end: todayIso });
+                    }}
+                    type="button"
+                  >
+                    Today
+                  </button>
+                  <button
+                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+                    onClick={() => {
+                      setDraftRange({});
+                    }}
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+                    onClick={() => {
+                      onDateRangeChange?.({ start: draftStart, end: draftEnd });
+                      setCalendarOpen(false);
+                    }}
+                    type="button"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
+                    onClick={() => setCalendarOpen(false)}
+                    type="button"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           {/* Search */}
           <input
             type="text"
@@ -769,9 +973,9 @@ export function DepartmentAnalytics({
                       {/* Expanded Content */}
                       {isExpanded && viewMode === 'users' && (
                         <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/30">
-                          <div className="text-sm font-medium mb-3">Пользователи департамента</div>
+                          <div className="text-sm font-medium mb-3">Department users</div>
                           {usersLoading ? (
-                            <div className="text-sm text-gray-500 dark:text-gray-400">Загрузка...</div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Loading...</div>
                           ) : usersError ? (
                             <div className="text-sm text-red-600 dark:text-red-400">{usersError}</div>
                           ) : usersData && usersData.length > 0 ? (
@@ -908,9 +1112,9 @@ export function DepartmentAnalytics({
                       {/* Expanded Content */}
                       {isExpanded && viewMode === 'users' && (
                         <div className="mt-2 ml-7 p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/30">
-                          <div className="text-sm font-medium mb-3">Пользователи департамента</div>
+                          <div className="text-sm font-medium mb-3">Department users</div>
                           {usersLoading ? (
-                            <div className="text-sm text-gray-500 dark:text-gray-400">Загрузка...</div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">Loading...</div>
                           ) : usersError ? (
                             <div className="text-sm text-red-600 dark:text-red-400">{usersError}</div>
                           ) : usersData && usersData.length > 0 ? (

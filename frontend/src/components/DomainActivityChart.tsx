@@ -97,7 +97,7 @@ export function DomainActivityChart({ data, loading, error, onUserClick, departm
         <div className="font-medium">User Activity</div>
         {departmentName && (
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            Департамент: <span className="font-medium text-blue-600 dark:text-blue-400">{departmentName}</span>
+            Department: <span className="font-medium text-blue-600 dark:text-blue-400">{departmentName}</span>
           </div>
         )}
       </div>

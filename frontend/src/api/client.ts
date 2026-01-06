@@ -138,9 +138,16 @@ export async function listDepartments() {
   return data.items;
 }
 
-export async function fetchDepartmentsAnalytics() {
+type DepartmentAnalyticsParams = {
+  timeRange?: 'all' | 'today' | 'week' | 'month';
+  startDate?: string;
+  endDate?: string;
+};
+
+export async function fetchDepartmentsAnalytics(params?: DepartmentAnalyticsParams) {
   const { data } = await api.get<{ departments: DepartmentAnalytics[] }>(
     '/api/departments/analytics',
+    { params },
   );
   return data.departments;
 }
@@ -156,9 +163,13 @@ export interface DepartmentUserAnalytics {
   screenshots: number;
 }
 
-export async function fetchDepartmentUsersAnalytics(departmentId: string) {
+export async function fetchDepartmentUsersAnalytics(
+  departmentId: string,
+  params?: DepartmentAnalyticsParams,
+) {
   const { data } = await api.get<{ users: DepartmentUserAnalytics[] }>(
     `/api/departments/${departmentId}/users/analytics`,
+    { params },
   );
   return data.users;
 }

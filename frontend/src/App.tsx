@@ -124,6 +124,7 @@ function App(): JSX.Element {
   const [departmentUsersLoading, setDepartmentUsersLoading] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const toastIdRef = useRef(0);
+  const [departmentDateRange, setDepartmentDateRange] = useState<{ start?: string; end?: string }>({});
 
   const displayNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -178,7 +179,10 @@ function App(): JSX.Element {
     setDeptAnalyticsError(undefined);
     setDeptAnalyticsLoading(true);
     try {
-      const depts = await fetchDepartmentsAnalytics();
+      const depts = await fetchDepartmentsAnalytics({
+        startDate: departmentDateRange.start,
+        endDate: departmentDateRange.end,
+      });
       // Prioritize Analytics department - move it to the top
       const sorted = [...depts].sort((a, b) => {
         const aIsAnalytics = a.name.toLowerCase() === 'analytics';
@@ -193,7 +197,7 @@ function App(): JSX.Element {
     } finally {
       setDeptAnalyticsLoading(false);
     }
-  }, []);
+  }, [departmentDateRange.end, departmentDateRange.start]);
 
   const loadActivity = useCallback(async () => {
     setActivityError(undefined);
@@ -332,8 +336,12 @@ function App(): JSX.Element {
         setUsersAggLoading(false);
       }
     })();
-    loadDeptAnalytics();
   }, [user, loadSummary, loadUsersOptions, loadDeptAnalytics]);
+
+  useEffect(() => {
+    if (!user) return;
+    loadDeptAnalytics();
+  }, [user, departmentDateRange.end, departmentDateRange.start, loadDeptAnalytics]);
 
   // Load activity when filters or page changes
   useEffect(() => {
@@ -478,6 +486,10 @@ function App(): JSX.Element {
                   onMetricChange={setDepartmentMetric}
                   selectedDepartment={selectedDepartment}
                   filters={filters}
+                  dateRange={departmentDateRange}
+                  onDateRangeChange={(range) => {
+                    setDepartmentDateRange(range);
+                  }}
                   onDepartmentClick={(departmentId, departmentName) => {
                     // Show activities for this department
                     // Clear user filter when changing department to show all users in the department

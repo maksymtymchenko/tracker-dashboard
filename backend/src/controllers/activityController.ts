@@ -24,6 +24,52 @@ const OldEventShape = z.object({
   type: z.string().optional(),
   data: z.any().optional(),
 });
+const ProcessOriginEnum = z.enum(['user', 'system', 'security', 'background']);
+const ProcessLaunchTriggerEnum = z.enum(['user_action', 'scheduled_task', 'service', 'unknown']);
+const ProcessDetectionSourceEnum = z.enum([
+  'active-win',
+  'windows-fallback',
+  'mac-osa',
+  'linux-fallback',
+  'unknown',
+]);
+const ProcessContextSchema = z.object({
+  pid: z.number().int().optional(),
+  ppid: z.number().int().optional(),
+  processName: z.string().optional(),
+  parentName: z.string().optional(),
+  sessionId: z.number().int().optional(),
+  sessionName: z.string().optional(),
+  user: z.string().optional(),
+  executablePath: z.string().optional(),
+  origin: ProcessOriginEnum.optional(),
+  launchTrigger: ProcessLaunchTriggerEnum.optional(),
+  detectionSource: ProcessDetectionSourceEnum.optional(),
+  isSecurityProcess: z.boolean().optional(),
+  originReason: z.string().optional(),
+});
+const ProcessContextNullableSchema = z.union([ProcessContextSchema, z.null()]);
+
+const securityInclusionClause = {
+  $or: [
+    { 'data.process.origin': { $ne: 'security' } },
+    {
+      'data.process.origin': 'security',
+      'data.process.launchTrigger': 'user_action',
+    },
+  ],
+};
+const blockedProcessNames = ['Windows Activity Tracker', 'MsMpEng', 'MsMpEng.exe'];
+const blockedProcessRegexes = blockedProcessNames.map(
+  (name) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+);
+const blockedProcessClause = {
+  $nor: [
+    { 'data.process.processName': { $in: blockedProcessRegexes } },
+    { 'data.application': { $in: blockedProcessRegexes } },
+    { 'data.title': { $in: blockedProcessRegexes } },
+  ],
+};
 
 function normalizeLower(value?: string): string | undefined {
   if (!value) return undefined;
@@ -46,6 +92,36 @@ function toIsoOrEpoch(value: unknown): string {
     return new Date(0).toISOString();
   }
   return date.toISOString();
+}
+
+function validateProcessContext(details: unknown): z.ZodIssue[] | null {
+  if (!details || typeof details !== 'object') return null;
+  const record = details as Record<string, unknown>;
+  if (!('process' in record)) return null;
+  const result = ProcessContextNullableSchema.safeParse(record.process);
+  if (result.success) return null;
+  return result.error.issues;
+}
+
+function withSecurityFilter(
+  filter: Record<string, unknown>,
+  includeSecurity: boolean,
+  originFilterProvided: boolean,
+): Record<string, unknown> {
+  if (includeSecurity || originFilterProvided) return filter;
+  if (filter.$and) {
+    return { ...filter, $and: [...(filter.$and as any[]), securityInclusionClause] };
+  }
+  return { ...filter, $and: [securityInclusionClause] };
+}
+
+function withBlockedProcessFilter(
+  filter: Record<string, unknown>,
+  _includeSecurity: boolean,
+): Record<string, unknown> {
+  // Always exclude known noisy system processes regardless of security filter flag.
+  const andClauses = filter.$and ? [...(filter.$and as any[]), blockedProcessClause] : [blockedProcessClause];
+  return { ...filter, $and: andClauses };
 }
 
 function intersectUserFilter(
@@ -81,6 +157,21 @@ export async function collectActivity(req: Request, res: Response) {
   const maxEvents = Number.isFinite(maxEventsRaw) ? Math.max(1, maxEventsRaw) : 1000;
   if (body.data.events.length > maxEvents) {
     return res.status(413).json({ error: 'too many events in batch' });
+  }
+  const processIssues = body.data.events.reduce(
+    (acc, event, index) => {
+      const details = 'time' in event ? event.details : event.data;
+      const issues = validateProcessContext(details);
+      if (issues) acc.push({ index, issues });
+      return acc;
+    },
+    [] as Array<{ index: number; issues: z.ZodIssue[] }>,
+  );
+  if (processIssues.length > 0) {
+    return res.status(400).json({
+      error: 'invalid process context',
+      issues: processIssues,
+    });
   }
   const docs = await EventModel.insertMany(
     body.data.events.map((e) => {
@@ -138,6 +229,10 @@ export async function listActivity(req: Request, res: Response) {
     searchMode: z.enum(['text', 'regex']).default('text'),
     domain: z.string().optional(),
     type: z.string().optional(),
+    origin: ProcessOriginEnum.optional(),
+    launchTrigger: ProcessLaunchTriggerEnum.optional(),
+    sessionId: z.coerce.number().optional(),
+    includeSecurity: z.coerce.boolean().optional(),
     page: z.coerce.number().default(1),
     limit: z.coerce.number().default(20),
     timeRange: z.enum(['all', 'today', 'week', 'month']).optional(),
@@ -202,6 +297,9 @@ export async function listActivity(req: Request, res: Response) {
 
   if (q.domain) filter.domain = q.domain;
   if (q.type) filter.type = q.type;
+  if (q.origin) filter['data.process.origin'] = q.origin;
+  if (q.launchTrigger) filter['data.process.launchTrigger'] = q.launchTrigger;
+  if (q.sessionId !== undefined) filter['data.process.sessionId'] = q.sessionId;
 
   // Text search across common fields (username, domain, type, reason, details.reason, and displayName)
   if (q.search && q.search.trim()) {
@@ -378,12 +476,25 @@ export async function listActivity(req: Request, res: Response) {
 
   const includeStats = q.includeStats ?? !isLegacyFormat;
   const includeTotal = q.includeTotal ?? !isCursorMode;
+  const includeSecurity = q.includeSecurity ?? false;
+  const statsBaseFilter = withBlockedProcessFilter(
+    {
+      ...filter,
+      ...(filter.$and ? { $and: [...(filter.$and as any[])] } : {}),
+    },
+    includeSecurity,
+  );
+  const statsFilter = withSecurityFilter(
+    statsBaseFilter,
+    includeSecurity,
+    Boolean(q.origin),
+  );
   const statsPromise = !includeStats
     ? Promise.resolve([])
     : isLegacyFormat
     ? Promise.resolve([])
     : EventModel.aggregate([
-        { $match: filter },
+        { $match: statsFilter },
         {
           $group: {
             _id: null,
@@ -411,8 +522,15 @@ export async function listActivity(req: Request, res: Response) {
         },
       ]);
   const queryLimit = isCursorMode ? limit + 1 : limit;
+  const queryFilter = withBlockedProcessFilter(
+    {
+      ...filter,
+      ...(filter.$and ? { $and: [...(filter.$and as any[])] } : {}),
+    },
+    includeSecurity,
+  );
   const [events, total, legacyAgg] = await Promise.all([
-    EventModel.find(filter)
+    EventModel.find(queryFilter)
       .select({
         timestamp: 1,
         username: 1,
@@ -426,7 +544,7 @@ export async function listActivity(req: Request, res: Response) {
       .skip(skip)
       .limit(queryLimit)
       .lean(),
-    includeTotal ? EventModel.countDocuments(filter) : Promise.resolve(0),
+    includeTotal ? EventModel.countDocuments(queryFilter) : Promise.resolve(0),
     statsPromise,
   ]);
 
@@ -513,7 +631,7 @@ export async function listActivity(req: Request, res: Response) {
   if (isLegacyFormat) {
     // compute stats for legacy shape
     const agg = await EventModel.aggregate([
-      { $match: filter },
+      { $match: statsFilter },
       {
         $group: {
           _id: null,
@@ -580,6 +698,12 @@ export async function listActivity(req: Request, res: Response) {
 }
 
 export async function analyticsSummary(_req: Request, res: Response) {
+  const includeSecurity = _req.query?.includeSecurity === 'true';
+  const securityMatch = withSecurityFilter(
+    withBlockedProcessFilter({}, includeSecurity),
+    includeSecurity,
+    false,
+  );
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -590,6 +714,7 @@ export async function analyticsSummary(_req: Request, res: Response) {
     {
       $facet: {
         total: [
+          { $match: securityMatch },
           {
             $group: {
               _id: null,
@@ -610,7 +735,13 @@ export async function analyticsSummary(_req: Request, res: Response) {
           },
         ],
         today: [
-          { $match: { timestamp: { $gte: today } } },
+          {
+            $match: withSecurityFilter(
+              withBlockedProcessFilter({ timestamp: { $gte: today } }, includeSecurity),
+              includeSecurity,
+              false,
+            ),
+          },
           {
             $group: {
               _id: null,
@@ -621,7 +752,13 @@ export async function analyticsSummary(_req: Request, res: Response) {
           { $project: { _id: 0, events: 1, duration: 1 } },
         ],
         week: [
-          { $match: { timestamp: { $gte: thisWeek } } },
+          {
+            $match: withSecurityFilter(
+              withBlockedProcessFilter({ timestamp: { $gte: thisWeek } }, includeSecurity),
+              includeSecurity,
+              false,
+            ),
+          },
           {
             $group: {
               _id: null,
@@ -632,7 +769,13 @@ export async function analyticsSummary(_req: Request, res: Response) {
           { $project: { _id: 0, events: 1, duration: 1 } },
         ],
         month: [
-          { $match: { timestamp: { $gte: thisMonth } } },
+          {
+            $match: withSecurityFilter(
+              withBlockedProcessFilter({ timestamp: { $gte: thisMonth } }, includeSecurity),
+              includeSecurity,
+              false,
+            ),
+          },
           {
             $group: {
               _id: null,
@@ -680,8 +823,14 @@ export async function analyticsSummary(_req: Request, res: Response) {
 
 export async function analyticsTopDomains(req: Request, res: Response) {
   const limit = Number(req.query.limit || 10);
+  const includeSecurity = req.query?.includeSecurity === 'true';
+  const match = withSecurityFilter(
+    withBlockedProcessFilter({ domain: { $ne: null } }, includeSecurity),
+    includeSecurity,
+    false,
+  );
   const agg = await EventModel.aggregate([
-    { $match: { domain: { $ne: null } } },
+    { $match: match },
     {
       $group: {
         _id: '$domain',
@@ -710,7 +859,14 @@ export async function analyticsTopDomains(req: Request, res: Response) {
 }
 
 export async function analyticsUsers(_req: Request, res: Response) {
+  const includeSecurity = _req.query?.includeSecurity === 'true';
+  const match = withSecurityFilter(
+    withBlockedProcessFilter({}, includeSecurity),
+    includeSecurity,
+    false,
+  );
   const agg = await EventModel.aggregate([
+    { $match: match },
     {
       $group: {
         _id: '$username',

@@ -5,6 +5,31 @@ export interface AuthUser {
   displayName?: string;
 }
 
+export type ProcessOrigin = 'user' | 'system' | 'security' | 'background';
+export type ProcessLaunchTrigger = 'user_action' | 'scheduled_task' | 'service' | 'unknown';
+export type ProcessDetectionSource =
+  | 'active-win'
+  | 'windows-fallback'
+  | 'mac-osa'
+  | 'linux-fallback'
+  | 'unknown';
+
+export interface ProcessContext {
+  pid?: number;
+  ppid?: number;
+  processName?: string;
+  parentName?: string;
+  sessionId?: number;
+  sessionName?: string;
+  user?: string;
+  executablePath?: string;
+  origin?: ProcessOrigin;
+  launchTrigger?: ProcessLaunchTrigger;
+  detectionSource?: ProcessDetectionSource;
+  isSecurityProcess?: boolean;
+  originReason?: string;
+}
+
 export interface ActivityItem {
   _id?: string;
   time: string;
@@ -87,5 +112,4 @@ export interface DepartmentUserAnalytics {
   apps: number;
   screenshots: number;
 }
-
 

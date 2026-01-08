@@ -42,8 +42,10 @@ export async function authStatus() {
   return data;
 }
 
-export async function fetchSummary() {
-  const { data } = await api.get<SummaryResponse>('/api/analytics/summary');
+export async function fetchSummary(params?: { includeSecurity?: boolean }) {
+  const { data } = await api.get<SummaryResponse>('/api/analytics/summary', {
+    params: { includeSecurity: params?.includeSecurity },
+  });
   return data;
 }
 
@@ -55,6 +57,10 @@ export async function fetchActivity(
     search: string;
     domain: string;
     type: string;
+    origin: string;
+    launchTrigger: string;
+    sessionId: number;
+    includeSecurity: boolean;
     page: number;
     limit: number;
     timeRange: 'all' | 'today' | 'week' | 'month';
@@ -113,17 +119,18 @@ export async function bulkDeleteScreenshots(filenames: string[]) {
   return data;
 }
 
-export async function fetchTopDomains(limit = 10) {
+export async function fetchTopDomains(limit = 10, params?: { includeSecurity?: boolean }) {
   const { data } = await api.get<{ items: TopDomainItem[] }>(
     '/api/analytics/top-domains',
-    { params: { limit } },
+    { params: { limit, includeSecurity: params?.includeSecurity } },
   );
   return data.items;
 }
 
-export async function fetchUsersAnalytics() {
+export async function fetchUsersAnalytics(params?: { includeSecurity?: boolean }) {
   const { data } = await api.get<{ items: UserAggregateItem[] }>(
     '/api/analytics/users',
+    { params: { includeSecurity: params?.includeSecurity } },
   );
   // Attach a friendly label for charts: prefer displayName, fall back to username
   return data.items.map((u) => ({

@@ -9,6 +9,10 @@ export interface ActivityFilterState {
   domain?: string;
   timeRange?: 'all' | 'today' | 'week' | 'month';
   type?: 'window_activity' | 'form_interaction' | 'click' | 'keypress' | 'scroll' | 'screenshot' | 'clipboard' | '';
+  origin?: 'user' | 'system' | 'security' | 'background' | '';
+  launchTrigger?: 'user_action' | 'scheduled_task' | 'service' | 'unknown' | '';
+  sessionId?: number;
+  includeSecurity?: boolean;
 }
 
 interface Props {
@@ -167,6 +171,54 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
           <option value="clipboard">clipboard</option>
         </select>
       </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2">
+        <select
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
+          value={value.origin || ''}
+          onChange={(e) => handleFilterChange({ origin: e.target.value as any || undefined })}
+        >
+          <option value="">All Origins</option>
+          <option value="user">user</option>
+          <option value="system">system</option>
+          <option value="security">security</option>
+          <option value="background">background</option>
+        </select>
+        <select
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
+          value={value.launchTrigger || ''}
+          onChange={(e) => handleFilterChange({ launchTrigger: e.target.value as any || undefined })}
+        >
+          <option value="">All Triggers</option>
+          <option value="user_action">user_action</option>
+          <option value="scheduled_task">scheduled_task</option>
+          <option value="service">service</option>
+          <option value="unknown">unknown</option>
+        </select>
+        <input
+          className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
+          placeholder="Session ID"
+          type="number"
+          value={value.sessionId ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === '') {
+              handleFilterChange({ sessionId: undefined });
+              return;
+            }
+            const next = Number(raw);
+            handleFilterChange({ sessionId: Number.isFinite(next) ? next : undefined });
+          }}
+        />
+        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+          <input
+            type="checkbox"
+            className="rounded border-gray-300 dark:border-gray-700"
+            checked={Boolean(value.includeSecurity)}
+            onChange={(e) => handleFilterChange({ includeSecurity: e.target.checked })}
+          />
+          Include security events
+        </label>
+      </div>
       <div className="flex items-center gap-2">
         <button className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 transition-colors" onClick={onRefresh} disabled={loading}>
           {loading ? 'Loading…' : 'Refresh'}
@@ -179,5 +231,3 @@ export function ActivityFilters({ value, onChange, onExportCSV, onExportJSON, on
     </div>
   );
 }
-
-

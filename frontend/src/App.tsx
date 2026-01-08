@@ -108,7 +108,10 @@ function App(): JSX.Element {
   const [deptAnalytics, setDeptAnalytics] = useState<DepartmentAnalyticsType[]>([]);
   const [deptAnalyticsLoading, setDeptAnalyticsLoading] = useState(false);
   const [deptAnalyticsError, setDeptAnalyticsError] = useState<string | undefined>();
-  const [filters, setFilters] = useState<ActivityFilterState>({ timeRange: 'all' });
+  const [filters, setFilters] = useState<ActivityFilterState>({
+    timeRange: 'all',
+    includeSecurity: false,
+  });
   const [showDepartments, setShowDepartments] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
   const [usersOptions, setUsersOptions] = useState<string[]>([]);
@@ -159,13 +162,13 @@ function App(): JSX.Element {
     setSummaryError(undefined);
     setSummaryLoading(true);
     try {
-      setSummary(await fetchSummary());
+      setSummary(await fetchSummary({ includeSecurity: filters.includeSecurity }));
     } catch (e: unknown) {
       setSummaryError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setSummaryLoading(false);
     }
-  }, []);
+  }, [filters.includeSecurity]);
 
   const loadUsersOptions = useCallback(async () => {
     try {
@@ -213,6 +216,10 @@ function App(): JSX.Element {
           domain: filters.domain || undefined,
           type: filters.type || undefined,
           search: filters.search || undefined,
+          origin: filters.origin || undefined,
+          launchTrigger: filters.launchTrigger || undefined,
+          sessionId: filters.sessionId ?? undefined,
+          includeSecurity: filters.includeSecurity,
         }),
       );
     } catch (e: unknown) {
@@ -239,6 +246,10 @@ function App(): JSX.Element {
           domain: filters.domain || undefined,
           type: filters.type || undefined,
           search: filters.search || undefined,
+          origin: filters.origin || undefined,
+          launchTrigger: filters.launchTrigger || undefined,
+          sessionId: filters.sessionId ?? undefined,
+          includeSecurity: filters.includeSecurity,
         }),
       );
     } catch (e: unknown) {
@@ -300,14 +311,35 @@ function App(): JSX.Element {
     if (user) {
       setActivityPage(1);
     }
-  }, [user, filters.search, filters.user, filters.department, filters.domain, filters.timeRange, filters.type, selectedDepartment]);
+  }, [
+    user,
+    filters.search,
+    filters.user,
+    filters.department,
+    filters.domain,
+    filters.timeRange,
+    filters.type,
+    filters.origin,
+    filters.launchTrigger,
+    filters.sessionId,
+    filters.includeSecurity,
+    selectedDepartment,
+  ]);
 
   // Reset screenshots page to 1 when filters change
   useEffect(() => {
     if (user) {
       setShotsPage(1);
     }
-  }, [user, filters.search, filters.user, filters.department, filters.domain, filters.timeRange]);
+  }, [
+    user,
+    filters.search,
+    filters.user,
+    filters.department,
+    filters.domain,
+    filters.timeRange,
+    filters.includeSecurity,
+  ]);
 
   // Load initial data when user logs in
   useEffect(() => {
@@ -318,7 +350,7 @@ function App(): JSX.Element {
       setTopDomainsError(undefined);
       setTopDomainsLoading(true);
       try {
-        setTopDomains(await fetchTopDomains(12));
+        setTopDomains(await fetchTopDomains(12, { includeSecurity: filters.includeSecurity }));
       } catch (e: unknown) {
         setTopDomainsError(e instanceof Error ? e.message : 'Failed to load');
       } finally {
@@ -329,14 +361,14 @@ function App(): JSX.Element {
       setUsersAggError(undefined);
       setUsersAggLoading(true);
       try {
-        setUsersAgg(await fetchUsersAnalytics());
+        setUsersAgg(await fetchUsersAnalytics({ includeSecurity: filters.includeSecurity }));
       } catch (e: unknown) {
         setUsersAggError(e instanceof Error ? e.message : 'Failed to load');
       } finally {
         setUsersAggLoading(false);
       }
     })();
-  }, [user, loadSummary, loadUsersOptions, loadDeptAnalytics]);
+  }, [user, loadSummary, loadUsersOptions, loadDeptAnalytics, filters.includeSecurity]);
 
   useEffect(() => {
     if (!user) return;

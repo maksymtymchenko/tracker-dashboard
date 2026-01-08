@@ -1,10 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { ActivityItem, Paginated } from 'src/types';
+import { ActivityItem, Paginated, ProcessContext } from 'src/types';
 import { fetchScreenshots } from 'src/api/client';
 
 type ViewMode = 'table' | 'card' | 'timeline';
 type SortField = 'time' | 'username' | 'domain' | 'type' | 'duration';
 type SortDirection = 'asc' | 'desc';
+
+const blockedProcessNames = ['windows activity tracker', 'msmpeng', 'msmpeng.exe'];
 
 interface Props {
   data: Paginated<ActivityItem> | null;
@@ -18,6 +20,7 @@ interface Props {
   onNotify?(message: string, tone?: 'info' | 'success' | 'error'): void;
 }
 
+/** Renders the activity log list with sorting, filtering, and detail views. */
 export function ActivityLog({
   data,
   loading,
@@ -211,6 +214,75 @@ export function ActivityLog({
     }
   };
 
+  const getProcessContext = (details: unknown): ProcessContext | null => {
+    if (!details || typeof details !== 'object') return null;
+    const record = details as Record<string, unknown>;
+    if (!record.process || typeof record.process !== 'object') return null;
+    return record.process as ProcessContext;
+  };
+
+  const isBlockedName = (value?: string | null): boolean => {
+    if (!value || typeof value !== 'string') return false;
+    return blockedProcessNames.includes(value.trim().toLowerCase());
+  };
+
+  const isBlockedActivity = (item: ActivityItem): boolean => {
+    if (isBlockedName(item.application) || isBlockedName(item.domain)) {
+      return true;
+    }
+
+    const process = getProcessContext(item.details);
+    if (process && (isBlockedName(process.processName) || isBlockedName(process.parentName))) {
+      return true;
+    }
+
+    if (item.details && typeof item.details === 'object') {
+      const details = item.details as Record<string, unknown>;
+      const detailCandidates = [
+        details.title,
+        details.application,
+        details.app,
+        details.appName,
+        details.app_name,
+      ];
+      if (detailCandidates.some((value) => (typeof value === 'string' ? isBlockedName(value) : false))) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const getOriginLabel = (origin?: ProcessContext['origin']): string => {
+    if (!origin) return 'Unknown';
+    return origin.charAt(0).toUpperCase() + origin.slice(1);
+  };
+
+  const getOriginBadgeClass = (origin?: ProcessContext['origin']): string => {
+    switch (origin) {
+      case 'user':
+        return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-200';
+      case 'system':
+        return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200';
+      case 'security':
+        return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200';
+      case 'background':
+        return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200';
+      default:
+        return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200';
+    }
+  };
+
+  const formatSessionLabel = (process: ProcessContext | null): string => {
+    if (!process) return '—';
+    if (process.sessionName && process.sessionId != null) {
+      return `${process.sessionName} (${process.sessionId})`;
+    }
+    if (process.sessionName) return process.sessionName;
+    if (process.sessionId != null) return String(process.sessionId);
+    return '—';
+  };
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -224,7 +296,7 @@ export function ActivityLog({
   const processedItems = useMemo(() => {
     if (!data?.items) return [];
 
-    let filtered = [...data.items];
+    let filtered = data.items.filter((item) => !isBlockedActivity(item));
 
     // Search filter
     if (searchQuery) {
@@ -248,6 +320,33 @@ export function ActivityLog({
           // Check reason field
           if (typeof details.reason === 'string' && details.reason.toLowerCase().includes(query)) {
             return true;
+          }
+          const process = getProcessContext(item.details);
+          if (process) {
+            const processFields = [
+              process.origin,
+              process.launchTrigger,
+              process.processName,
+              process.parentName,
+              process.sessionName,
+              process.originReason,
+              process.executablePath,
+              process.user,
+            ];
+            if (process.sessionId != null && String(process.sessionId).includes(query)) {
+              return true;
+            }
+            if (process.pid != null && String(process.pid).includes(query)) {
+              return true;
+            }
+            if (process.ppid != null && String(process.ppid).includes(query)) {
+              return true;
+            }
+            for (const value of processFields) {
+              if (typeof value === 'string' && value.toLowerCase().includes(query)) {
+                return true;
+              }
+            }
           }
           // Also search in other string fields in details
           for (const value of Object.values(details)) {
@@ -651,6 +750,8 @@ export function ActivityLog({
     return sortDirection === 'asc' ? <span>↑</span> : <span>↓</span>;
   };
 
+  const openProcess = open ? getProcessContext(open.details) : null;
+
   return (
     <div>
       {/* Header Controls */}
@@ -752,6 +853,8 @@ export function ActivityLog({
                     <SortIcon field="type" />
                   </div>
                 </th>
+                <th className="py-3 px-4">Origin</th>
+                <th className="py-3 px-4">Session</th>
                 <th
                   className="py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                   onClick={() => handleSort('duration')}
@@ -766,11 +869,13 @@ export function ActivityLog({
             </thead>
             <tbody>
               {!loading && processedItems.length
-                ? processedItems.map((row) => (
-                    <tr
-                      key={String(row._id) + row.time}
-                      className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/70 dark:hover:bg-gray-900/60 transition-colors"
-                    >
+                ? processedItems.map((row) => {
+                    const process = getProcessContext(row.details);
+                    return (
+                      <tr
+                        key={String(row._id) + row.time}
+                        className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/70 dark:hover:bg-gray-900/60 transition-colors"
+                      >
                       <td className="py-3 px-4">
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           {formatTime(row.time)}
@@ -825,6 +930,14 @@ export function ActivityLog({
                         </span>
                       </td>
                       <td className="py-3 px-4">
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getOriginBadgeClass(process?.origin)}`}>
+                          {getOriginLabel(process?.origin)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-xs text-gray-600 dark:text-gray-300">
+                        {formatSessionLabel(process)}
+                      </td>
+                      <td className="py-3 px-4">
                         {row.duration != null ? (
                           <span className="text-xs">{formatDuration(row.duration)}</span>
                         ) : (
@@ -841,10 +954,11 @@ export function ActivityLog({
                         </button>
                       </td>
                     </tr>
-                  ))
+                  );
+                })
                 : (
                   <tr>
-                    <td className="py-8 px-4 text-center text-gray-500 dark:text-gray-400" colSpan={8}>
+                    <td className="py-8 px-4 text-center text-gray-500 dark:text-gray-400" colSpan={10}>
                       {loading ? 'Loading…' : searchQuery ? 'No results found' : 'No data'}
                     </td>
                   </tr>
@@ -858,86 +972,100 @@ export function ActivityLog({
       {viewMode === 'card' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {!loading && processedItems.length
-            ? processedItems.map((row) => (
-                <div
-                  key={String(row._id) + row.time}
-                  className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:shadow-md transition-all"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${getActivityTypeColor(
-                        row.type,
-                      )}`}
-                    >
-                      <span>{getActivityTypeIcon(row.type)}</span>
-                      {row.type.replace('_', ' ')}
-                    </span>
-                    <span className="text-xs text-gray-400 dark:text-gray-500">
-                      {formatTime(row.time)}
-                    </span>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">User: </span>
-                      {onUserClick ? (
-                        <button
-                          onClick={() => onUserClick(row.username)}
-                          className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+            ? processedItems.map((row) => {
+                const process = getProcessContext(row.details);
+                return (
+                  <div
+                    key={String(row._id) + row.time}
+                    className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:shadow-md transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-3 gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${getActivityTypeColor(
+                            row.type,
+                          )}`}
                         >
-                          {row.displayName || row.username}
-                        </button>
-                      ) : (
-                        <span className="font-medium">
-                          {row.displayName || row.username}
+                          <span>{getActivityTypeIcon(row.type)}</span>
+                          {row.type.replace('_', ' ')}
                         </span>
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getOriginBadgeClass(process?.origin)}`}>
+                          {getOriginLabel(process?.origin)}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {formatTime(row.time)}
+                      </span>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">User: </span>
+                        {onUserClick ? (
+                          <button
+                            onClick={() => onUserClick(row.username)}
+                            className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                          >
+                            {row.displayName || row.username}
+                          </button>
+                        ) : (
+                          <span className="font-medium">
+                            {row.displayName || row.username}
+                          </span>
+                        )}
+                        {row.displayName && (
+                          <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                            ({row.username})
+                          </span>
+                        )}
+                      </div>
+                      {row.department && (
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Department: </span>
+                          <span>{row.department}</span>
+                        </div>
                       )}
-                      {row.displayName && (
-                        <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
-                          ({row.username})
-                        </span>
+                      {process && (
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Session: </span>
+                          <span>{formatSessionLabel(process)}</span>
+                        </div>
+                      )}
+                      {row.domain && (
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Domain: </span>
+                          <span className="break-all">{row.domain}</span>
+                        </div>
+                      )}
+                      {row.url && (
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">URL: </span>
+                          <a
+                            href={row.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 dark:text-blue-400 hover:underline break-all text-xs"
+                          >
+                            {row.url}
+                          </a>
+                        </div>
+                      )}
+                      {row.duration != null && (
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Duration: </span>
+                          <span>{formatDuration(row.duration)}</span>
+                        </div>
                       )}
                     </div>
-                    {row.department && (
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">Department: </span>
-                        <span>{row.department}</span>
-                      </div>
-                    )}
-                    {row.domain && (
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">Domain: </span>
-                        <span className="break-all">{row.domain}</span>
-                      </div>
-                    )}
-                    {row.url && (
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">URL: </span>
-                        <a
-                          href={row.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 dark:text-blue-400 hover:underline break-all text-xs"
-                        >
-                          {row.url}
-                        </a>
-                      </div>
-                    )}
-                    {row.duration != null && (
-                      <div>
-                        <span className="text-gray-500 dark:text-gray-400">Duration: </span>
-                        <span>{formatDuration(row.duration)}</span>
-                      </div>
-                    )}
+                    <button
+                      className="mt-3 w-full text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                      onClick={() => handleViewClick(row)}
+                      disabled={row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row)}
+                    >
+                      {row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row) ? 'Loading…' : row.type === 'screenshot' ? 'View Screenshot' : 'View Details'}
+                    </button>
                   </div>
-                  <button
-                    className="mt-3 w-full text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
-                    onClick={() => handleViewClick(row)}
-                    disabled={row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row)}
-                  >
-                    {row.type === 'screenshot' && loadingScreenshot === getActivityItemId(row) ? 'Loading…' : row.type === 'screenshot' ? 'View Screenshot' : 'View Details'}
-                  </button>
-                </div>
-              ))
+                );
+              })
             : Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="h-48 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
               ))}
@@ -950,7 +1078,9 @@ export function ActivityLog({
           <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-800" />
           <div className="space-y-4">
             {!loading && processedItems.length
-              ? processedItems.map((row, index) => (
+              ? processedItems.map((row) => {
+                  const process = getProcessContext(row.details);
+                  return (
                   <div key={String(row._id) + row.time} className="relative flex gap-4">
                     <div className="flex-shrink-0 w-16 text-right">
                       <div className="sticky top-4">
@@ -963,14 +1093,19 @@ export function ActivityLog({
                     <div className="flex-1 pb-4">
                       <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:shadow-md transition-all">
                         <div className="flex items-start justify-between mb-2">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${getActivityTypeColor(
-                              row.type,
-                            )}`}
-                          >
-                            <span>{getActivityTypeIcon(row.type)}</span>
-                            {row.type.replace('_', ' ')}
-                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium ${getActivityTypeColor(
+                                row.type,
+                              )}`}
+                            >
+                              <span>{getActivityTypeIcon(row.type)}</span>
+                              {row.type.replace('_', ' ')}
+                            </span>
+                            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getOriginBadgeClass(process?.origin)}`}>
+                              {getOriginLabel(process?.origin)}
+                            </span>
+                          </div>
                         </div>
                         <div className="space-y-1 text-sm">
                           <div>
@@ -999,6 +1134,11 @@ export function ActivityLog({
                               </span>
                             )}
                           </div>
+                          {process && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              Session: {formatSessionLabel(process)}
+                            </div>
+                          )}
                           {row.domain && (
                             <div>
                               <span className="text-gray-500 dark:text-gray-400">Domain: </span>
@@ -1033,7 +1173,8 @@ export function ActivityLog({
                       </div>
                     </div>
                   </div>
-                ))
+                );
+              })
               : Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="h-32 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse" />
                 ))}
@@ -1192,6 +1333,102 @@ export function ActivityLog({
                 )}
               </div>
 
+              <div>
+                <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">
+                  Process Origin
+                </div>
+                {openProcess ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                        Origin
+                      </div>
+                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getOriginBadgeClass(openProcess.origin)}`}>
+                        {getOriginLabel(openProcess.origin)}
+                      </span>
+                      {openProcess.isSecurityProcess && (
+                        <span className="ml-2 text-xs text-red-600 dark:text-red-300">Security</span>
+                      )}
+                    </div>
+                    {openProcess.launchTrigger && (
+                      <div>
+                        <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                          Trigger
+                        </div>
+                        <div>{openProcess.launchTrigger}</div>
+                      </div>
+                    )}
+                    {(openProcess.sessionId != null || openProcess.sessionName) && (
+                      <div>
+                        <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                          Session
+                        </div>
+                        <div>{formatSessionLabel(openProcess)}</div>
+                      </div>
+                    )}
+                    {(openProcess.pid != null || openProcess.ppid != null) && (
+                      <div>
+                        <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                          PID / PPID
+                        </div>
+                        <div>
+                          {openProcess.pid != null ? openProcess.pid : '—'} / {openProcess.ppid != null ? openProcess.ppid : '—'}
+                        </div>
+                      </div>
+                    )}
+                    {(openProcess.processName || openProcess.parentName) && (
+                      <div>
+                        <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                          Process
+                        </div>
+                        <div>{openProcess.processName || '—'}</div>
+                        {openProcess.parentName && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            Parent: {openProcess.parentName}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {openProcess.user && (
+                      <div>
+                        <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                          User
+                        </div>
+                        <div>{openProcess.user}</div>
+                      </div>
+                    )}
+                    {openProcess.executablePath && (
+                      <div className="sm:col-span-2">
+                        <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                          Executable Path
+                        </div>
+                        <div className="text-xs break-all">{openProcess.executablePath}</div>
+                      </div>
+                    )}
+                    {openProcess.detectionSource && (
+                      <div>
+                        <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                          Detection Source
+                        </div>
+                        <div>{openProcess.detectionSource}</div>
+                      </div>
+                    )}
+                    {openProcess.originReason && (
+                      <div className="sm:col-span-2">
+                        <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                          Origin Reason
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-300">
+                          {openProcess.originReason}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500 dark:text-gray-400">Unknown origin</div>
+                )}
+              </div>
+
               {open.details && (
                 <div>
                   <div className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">
@@ -1200,14 +1437,16 @@ export function ActivityLog({
                   <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-950/50">
                     {typeof open.details === 'object' ? (
                       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                        {Object.entries(open.details as Record<string, unknown>).map(([k, v]) => (
-                          <div key={k} className="flex flex-col">
-                            <dt className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
-                              {k}
-                            </dt>
-                            <dd className="break-words">{renderDetailValue(k, v)}</dd>
-                          </div>
-                        ))}
+                        {Object.entries(open.details as Record<string, unknown>)
+                          .filter(([k]) => k !== 'process')
+                          .map(([k, v]) => (
+                            <div key={k} className="flex flex-col">
+                              <dt className="text-xs uppercase text-gray-500 dark:text-gray-400 mb-1">
+                                {k}
+                              </dt>
+                              <dd className="break-words">{renderDetailValue(k, v)}</dd>
+                            </div>
+                          ))}
                       </dl>
                     ) : (
                       <div className="text-sm break-words">{String(open.details)}</div>

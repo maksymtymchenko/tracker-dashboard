@@ -94,6 +94,27 @@ function toIsoOrEpoch(value: unknown): string {
   return date.toISOString();
 }
 
+function normalizeDateRange(start?: string, end?: string): { start: Date; end: Date } | null {
+  const parseDate = (value?: string): Date | null => {
+    if (!value) return null;
+    const [y, m, d] = value.split('-').map((v) => Number(v));
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+    return new Date(y, m - 1, d);
+  };
+  const startDate = parseDate(start);
+  const endDate = parseDate(end);
+  if (!startDate && !endDate) return null;
+  const rangeStart = startDate || endDate;
+  const rangeEnd = endDate || startDate;
+  if (!rangeStart || !rangeEnd) return null;
+  rangeStart.setHours(0, 0, 0, 0);
+  rangeEnd.setHours(23, 59, 59, 999);
+  if (rangeStart.getTime() > rangeEnd.getTime()) {
+    return { start: rangeEnd, end: rangeStart };
+  }
+  return { start: rangeStart, end: rangeEnd };
+}
+
 function validateProcessContext(details: unknown): z.ZodIssue[] | null {
   if (!details || typeof details !== 'object') return null;
   const record = details as Record<string, unknown>;
@@ -236,6 +257,8 @@ export async function listActivity(req: Request, res: Response) {
     page: z.coerce.number().default(1),
     limit: z.coerce.number().default(20),
     timeRange: z.enum(['all', 'today', 'week', 'month']).optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
     after: z.string().optional(),
     includeStats: z.coerce.boolean().optional(),
     includeTotal: z.coerce.boolean().optional(),
@@ -421,7 +444,10 @@ export async function listActivity(req: Request, res: Response) {
   }
 
   const now = new Date();
-  if (q.timeRange && q.timeRange !== 'all') {
+  const dateRange = normalizeDateRange(q.startDate, q.endDate);
+  if (dateRange) {
+    filter.timestamp = { $gte: dateRange.start, $lte: dateRange.end };
+  } else if (q.timeRange && q.timeRange !== 'all') {
     const start = new Date();
     if (q.timeRange === 'today') {
       start.setHours(0, 0, 0, 0);
@@ -698,12 +724,26 @@ export async function listActivity(req: Request, res: Response) {
 }
 
 export async function analyticsSummary(_req: Request, res: Response) {
-  const includeSecurity = _req.query?.includeSecurity === 'true';
+  const querySchema = z.object({
+    includeSecurity: z.coerce.boolean().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+  });
+  const q = querySchema.parse(_req.query);
+  const includeSecurity = q.includeSecurity ?? false;
   const securityMatch = withSecurityFilter(
     withBlockedProcessFilter({}, includeSecurity),
     includeSecurity,
     false,
   );
+  const dateRange = normalizeDateRange(q.startDate, q.endDate);
+  const totalMatch = dateRange
+    ? withSecurityFilter(
+        withBlockedProcessFilter({ timestamp: { $gte: dateRange.start, $lte: dateRange.end } }, includeSecurity),
+        includeSecurity,
+        false,
+      )
+    : securityMatch;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -714,7 +754,7 @@ export async function analyticsSummary(_req: Request, res: Response) {
     {
       $facet: {
         total: [
-          { $match: securityMatch },
+          { $match: totalMatch },
           {
             $group: {
               _id: null,
@@ -800,9 +840,12 @@ export async function analyticsSummary(_req: Request, res: Response) {
   const monthS = result.month[0] || { events: 0, duration: 0 };
 
   // Run user and screenshot counts in parallel
+  const screenshotMatch = dateRange
+    ? { mtime: { $gte: dateRange.start, $lte: dateRange.end } }
+    : {};
   const [registeredUsers, screenshots] = await Promise.all([
     UserModel.countDocuments(),
-    ScreenshotModel.estimatedDocumentCount(),
+    ScreenshotModel.countDocuments(screenshotMatch),
   ]);
   // include legacy-compatible totals with screenshots for UI
   const totals = {
@@ -822,10 +865,22 @@ export async function analyticsSummary(_req: Request, res: Response) {
 }
 
 export async function analyticsTopDomains(req: Request, res: Response) {
-  const limit = Number(req.query.limit || 10);
-  const includeSecurity = req.query?.includeSecurity === 'true';
+  const querySchema = z.object({
+    limit: z.coerce.number().optional(),
+    includeSecurity: z.coerce.boolean().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+  });
+  const q = querySchema.parse(req.query);
+  const limit = q.limit || 10;
+  const includeSecurity = q.includeSecurity ?? false;
+  const dateRange = normalizeDateRange(q.startDate, q.endDate);
+  const baseMatch: Record<string, unknown> = { domain: { $ne: null } };
+  if (dateRange) {
+    baseMatch.timestamp = { $gte: dateRange.start, $lte: dateRange.end };
+  }
   const match = withSecurityFilter(
-    withBlockedProcessFilter({ domain: { $ne: null } }, includeSecurity),
+    withBlockedProcessFilter(baseMatch, includeSecurity),
     includeSecurity,
     false,
   );
@@ -859,9 +914,20 @@ export async function analyticsTopDomains(req: Request, res: Response) {
 }
 
 export async function analyticsUsers(_req: Request, res: Response) {
-  const includeSecurity = _req.query?.includeSecurity === 'true';
+  const querySchema = z.object({
+    includeSecurity: z.coerce.boolean().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+  });
+  const q = querySchema.parse(_req.query);
+  const includeSecurity = q.includeSecurity ?? false;
+  const dateRange = normalizeDateRange(q.startDate, q.endDate);
+  const baseMatch: Record<string, unknown> = {};
+  if (dateRange) {
+    baseMatch.timestamp = { $gte: dateRange.start, $lte: dateRange.end };
+  }
   const match = withSecurityFilter(
-    withBlockedProcessFilter({}, includeSecurity),
+    withBlockedProcessFilter(baseMatch, includeSecurity),
     includeSecurity,
     false,
   );

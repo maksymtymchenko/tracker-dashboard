@@ -5,9 +5,10 @@ import { ScreenshotItem, Paginated } from 'src/types';
 interface Props {
   username: string | null;
   onClose(): void;
+  dateRange?: { start?: string; end?: string };
 }
 
-export function UserScreenshotsModal({ username, onClose }: Props): JSX.Element | null {
+export function UserScreenshotsModal({ username, onClose, dateRange }: Props): JSX.Element | null {
   const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -34,6 +35,8 @@ export function UserScreenshotsModal({ username, onClose }: Props): JSX.Element 
           limit,
           user: username,
           timeRange: 'all',
+          startDate: dateRange?.start,
+          endDate: dateRange?.end,
         });
         setScreenshots(res.items);
         setTotal((res as any).total ?? (res as any).count ?? 0);
@@ -45,7 +48,7 @@ export function UserScreenshotsModal({ username, onClose }: Props): JSX.Element 
     };
 
     loadScreenshots();
-  }, [username, page]);
+  }, [username, page, dateRange?.end, dateRange?.start]);
 
   // Disable body scroll when modal is open
   useEffect(() => {
@@ -179,4 +182,3 @@ export function UserScreenshotsModal({ username, onClose }: Props): JSX.Element 
     </div>
   );
 }
-

@@ -127,7 +127,7 @@ function App(): JSX.Element {
   const [departmentUsersLoading, setDepartmentUsersLoading] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const toastIdRef = useRef(0);
-  const [departmentDateRange, setDepartmentDateRange] = useState<{ start?: string; end?: string }>({});
+  const [dateRange, setDateRange] = useState<{ start?: string; end?: string }>({});
 
   const displayNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -162,13 +162,13 @@ function App(): JSX.Element {
     setSummaryError(undefined);
     setSummaryLoading(true);
     try {
-      setSummary(await fetchSummary({ includeSecurity: filters.includeSecurity }));
+      setSummary(await fetchSummary({ includeSecurity: filters.includeSecurity, startDate: dateRange.start, endDate: dateRange.end }));
     } catch (e: unknown) {
       setSummaryError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setSummaryLoading(false);
     }
-  }, [filters.includeSecurity]);
+  }, [filters.includeSecurity, dateRange.end, dateRange.start]);
 
   const loadUsersOptions = useCallback(async () => {
     try {
@@ -183,8 +183,8 @@ function App(): JSX.Element {
     setDeptAnalyticsLoading(true);
     try {
       const depts = await fetchDepartmentsAnalytics({
-        startDate: departmentDateRange.start,
-        endDate: departmentDateRange.end,
+        startDate: dateRange.start,
+        endDate: dateRange.end,
       });
       // Prioritize Analytics department - move it to the top
       const sorted = [...depts].sort((a, b) => {
@@ -200,7 +200,7 @@ function App(): JSX.Element {
     } finally {
       setDeptAnalyticsLoading(false);
     }
-  }, [departmentDateRange.end, departmentDateRange.start]);
+  }, [dateRange.end, dateRange.start]);
 
   const loadActivity = useCallback(async () => {
     setActivityError(undefined);
@@ -211,6 +211,8 @@ function App(): JSX.Element {
           page: activityPage,
           limit: activityLimit,
           timeRange: (filters.timeRange as any) || 'all',
+          startDate: dateRange.start,
+          endDate: dateRange.end,
           user: filters.user || undefined,
           department: selectedDepartment?.name || filters.department || undefined,
           domain: filters.domain || undefined,
@@ -227,7 +229,7 @@ function App(): JSX.Element {
     } finally {
       setActivityLoading(false);
     }
-  }, [activityPage, activityLimit, filters, selectedDepartment]);
+  }, [activityPage, activityLimit, filters, selectedDepartment, dateRange.end, dateRange.start]);
 
   const loadDepartmentActivity = useCallback(async () => {
     if (!selectedDepartment) {
@@ -242,6 +244,8 @@ function App(): JSX.Element {
           page: departmentActivityPage,
           limit: activityLimit,
           timeRange: (filters.timeRange as any) || 'all',
+          startDate: dateRange.start,
+          endDate: dateRange.end,
           department: selectedDepartment.name,
           domain: filters.domain || undefined,
           type: filters.type || undefined,
@@ -257,7 +261,7 @@ function App(): JSX.Element {
     } finally {
       setDepartmentActivityLoading(false);
     }
-  }, [departmentActivityPage, activityLimit, selectedDepartment, filters]);
+  }, [departmentActivityPage, activityLimit, selectedDepartment, filters, dateRange.end, dateRange.start]);
 
   const loadScreenshots = useCallback(async () => {
     setShotsError(undefined);
@@ -271,8 +275,10 @@ function App(): JSX.Element {
         user: userFilter,
         department: filters.department || undefined,
         domain: filters.domain || undefined,
-        timeRange: (filters.timeRange as any) || 'all',
-        search: filters.search || undefined,
+          timeRange: (filters.timeRange as any) || 'all',
+          startDate: dateRange.start,
+          endDate: dateRange.end,
+          search: filters.search || undefined,
       });
       setShots(res.items);
       setShotsTotal((res as any).total ?? (res as any).count ?? 0);
@@ -281,7 +287,7 @@ function App(): JSX.Element {
     } finally {
       setShotsLoading(false);
     }
-  }, [shotsPage, shotsLimit, shotsUser, filters]);
+  }, [shotsPage, shotsLimit, shotsUser, filters, dateRange.end, dateRange.start]);
 
   const handleRefresh = useCallback(() => {
     loadActivity();
@@ -323,6 +329,8 @@ function App(): JSX.Element {
     filters.launchTrigger,
     filters.sessionId,
     filters.includeSecurity,
+    dateRange.start,
+    dateRange.end,
     selectedDepartment,
   ]);
 
@@ -339,6 +347,8 @@ function App(): JSX.Element {
     filters.domain,
     filters.timeRange,
     filters.includeSecurity,
+    dateRange.start,
+    dateRange.end,
   ]);
 
   // Load initial data when user logs in
@@ -350,7 +360,7 @@ function App(): JSX.Element {
       setTopDomainsError(undefined);
       setTopDomainsLoading(true);
       try {
-        setTopDomains(await fetchTopDomains(12, { includeSecurity: filters.includeSecurity }));
+      setTopDomains(await fetchTopDomains(12, { includeSecurity: filters.includeSecurity, startDate: dateRange.start, endDate: dateRange.end }));
       } catch (e: unknown) {
         setTopDomainsError(e instanceof Error ? e.message : 'Failed to load');
       } finally {
@@ -361,19 +371,19 @@ function App(): JSX.Element {
       setUsersAggError(undefined);
       setUsersAggLoading(true);
       try {
-        setUsersAgg(await fetchUsersAnalytics({ includeSecurity: filters.includeSecurity }));
+      setUsersAgg(await fetchUsersAnalytics({ includeSecurity: filters.includeSecurity, startDate: dateRange.start, endDate: dateRange.end }));
       } catch (e: unknown) {
         setUsersAggError(e instanceof Error ? e.message : 'Failed to load');
       } finally {
         setUsersAggLoading(false);
       }
     })();
-  }, [user, loadSummary, loadUsersOptions, loadDeptAnalytics, filters.includeSecurity]);
+  }, [user, loadSummary, loadUsersOptions, loadDeptAnalytics, filters.includeSecurity, dateRange.end, dateRange.start]);
 
   useEffect(() => {
     if (!user) return;
     loadDeptAnalytics();
-  }, [user, departmentDateRange.end, departmentDateRange.start, loadDeptAnalytics]);
+  }, [user, dateRange.end, dateRange.start, loadDeptAnalytics]);
 
   // Load activity when filters or page changes
   useEffect(() => {
@@ -518,9 +528,12 @@ function App(): JSX.Element {
                   onMetricChange={setDepartmentMetric}
                   selectedDepartment={selectedDepartment}
                   filters={filters}
-                  dateRange={departmentDateRange}
+                  dateRange={dateRange}
                   onDateRangeChange={(range) => {
-                    setDepartmentDateRange(range);
+                    setDateRange(range);
+                    if (range.start || range.end) {
+                      setFilters((prev) => ({ ...prev, timeRange: 'all' }));
+                    }
                   }}
                   onDepartmentClick={(departmentId, departmentName) => {
                     // Show activities for this department
@@ -591,6 +604,15 @@ function App(): JSX.Element {
               loading={activityLoading}
               usersOptions={filteredUsersOptions}
               displayNames={displayNames}
+              hiddenFields={{
+                user: true,
+                department: true,
+                timeRange: true,
+                type: true,
+                origin: true,
+                launchTrigger: true,
+                sessionId: true,
+              }}
             />
             <div className="mt-4">
               <ActivityLog
@@ -604,6 +626,7 @@ function App(): JSX.Element {
                   setFilters({ ...filters, user: username });
                 }}
                 searchQuery={filters.search || ''}
+                dateRange={dateRange}
                 onNotify={notify}
               />
             </div>
@@ -630,6 +653,7 @@ function App(): JSX.Element {
               userRole={user?.role === 'ADMIN' || user?.role === 'admin' ? 'admin' : 'user'}
               searchQuery={filters.search}
               displayNames={displayNames}
+              dateRange={dateRange}
               onNotify={notify}
             />
           </Suspense>
@@ -647,10 +671,10 @@ function App(): JSX.Element {
           />
         </Suspense>
         <Suspense fallback={null}>
-          <UserDetailsModal username={selectedUser} onClose={() => setSelectedUser(null)} />
+          <UserDetailsModal username={selectedUser} onClose={() => setSelectedUser(null)} dateRange={dateRange} />
         </Suspense>
         <Suspense fallback={null}>
-          <UserScreenshotsModal username={selectedUserScreenshots} onClose={() => setSelectedUserScreenshots(null)} />
+          <UserScreenshotsModal username={selectedUserScreenshots} onClose={() => setSelectedUserScreenshots(null)} dateRange={dateRange} />
         </Suspense>
         <ToastStack items={toasts} onDismiss={dismissToast} />
       </div>

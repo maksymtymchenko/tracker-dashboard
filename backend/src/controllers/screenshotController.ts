@@ -35,6 +35,27 @@ function extractFilename(pathOrFilename: string): string {
   return pathOrFilename;
 }
 
+function normalizeDateRange(start?: string, end?: string): { start: Date; end: Date } | null {
+  const parseDate = (value?: string): Date | null => {
+    if (!value) return null;
+    const [y, m, d] = value.split('-').map((v) => Number(v));
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+    return new Date(y, m - 1, d);
+  };
+  const startDate = parseDate(start);
+  const endDate = parseDate(end);
+  if (!startDate && !endDate) return null;
+  const rangeStart = startDate || endDate;
+  const rangeEnd = endDate || startDate;
+  if (!rangeStart || !rangeEnd) return null;
+  rangeStart.setHours(0, 0, 0, 0);
+  rangeEnd.setHours(23, 59, 59, 999);
+  if (rangeStart.getTime() > rangeEnd.getTime()) {
+    return { start: rangeEnd, end: rangeStart };
+  }
+  return { start: rangeStart, end: rangeEnd };
+}
+
 export async function cleanupOldScreenshots(): Promise<void> {
   const cutoff = new Date(Date.now() - SCREENSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const oldShots = await ScreenshotModel.find({ mtime: { $lt: cutoff } }, { filename: 1 }).limit(500).lean();
@@ -125,6 +146,8 @@ export async function listScreenshots(req: Request, res: Response) {
     page: z.coerce.number().default(1),
     limit: z.coerce.number().default(20),
     timeRange: z.enum(['all', 'today', 'week', 'month']).optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
     search: z.string().optional(),
   });
   const q = querySchema.parse(req.query);
@@ -246,7 +269,10 @@ export async function listScreenshots(req: Request, res: Response) {
 
   // Handle time range filtering
   const now = new Date();
-  if (q.timeRange && q.timeRange !== 'all') {
+  const dateRange = normalizeDateRange(q.startDate, q.endDate);
+  if (dateRange) {
+    filter.mtime = { $gte: dateRange.start, $lte: dateRange.end };
+  } else if (q.timeRange && q.timeRange !== 'all') {
     const start = new Date();
     if (q.timeRange === 'today') {
       start.setHours(0, 0, 0, 0);

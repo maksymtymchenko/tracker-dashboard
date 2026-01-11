@@ -42,9 +42,13 @@ export async function authStatus() {
   return data;
 }
 
-export async function fetchSummary(params?: { includeSecurity?: boolean }) {
+export async function fetchSummary(params?: { includeSecurity?: boolean; startDate?: string; endDate?: string }) {
   const { data } = await api.get<SummaryResponse>('/api/analytics/summary', {
-    params: { includeSecurity: params?.includeSecurity },
+    params: {
+      includeSecurity: params?.includeSecurity,
+      startDate: params?.startDate,
+      endDate: params?.endDate,
+    },
   });
   return data;
 }
@@ -64,6 +68,8 @@ export async function fetchActivity(
     page: number;
     limit: number;
     timeRange: 'all' | 'today' | 'week' | 'month';
+    startDate: string;
+    endDate: string;
   }>,
 ) {
   const query = { ...params } as any;
@@ -83,6 +89,8 @@ export async function fetchScreenshots(
     department: string;
     domain: string;
     timeRange: 'all' | 'today' | 'week' | 'month';
+    startDate: string;
+    endDate: string;
     search: string;
   }>,
 ) {
@@ -119,18 +127,18 @@ export async function bulkDeleteScreenshots(filenames: string[]) {
   return data;
 }
 
-export async function fetchTopDomains(limit = 10, params?: { includeSecurity?: boolean }) {
+export async function fetchTopDomains(limit = 10, params?: { includeSecurity?: boolean; startDate?: string; endDate?: string }) {
   const { data } = await api.get<{ items: TopDomainItem[] }>(
     '/api/analytics/top-domains',
-    { params: { limit, includeSecurity: params?.includeSecurity } },
+    { params: { limit, includeSecurity: params?.includeSecurity, startDate: params?.startDate, endDate: params?.endDate } },
   );
   return data.items;
 }
 
-export async function fetchUsersAnalytics(params?: { includeSecurity?: boolean }) {
+export async function fetchUsersAnalytics(params?: { includeSecurity?: boolean; startDate?: string; endDate?: string }) {
   const { data } = await api.get<{ items: UserAggregateItem[] }>(
     '/api/analytics/users',
-    { params: { includeSecurity: params?.includeSecurity } },
+    { params: { includeSecurity: params?.includeSecurity, startDate: params?.startDate, endDate: params?.endDate } },
   );
   // Attach a friendly label for charts: prefer displayName, fall back to username
   return data.items.map((u) => ({

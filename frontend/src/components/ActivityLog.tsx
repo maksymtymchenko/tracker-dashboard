@@ -15,6 +15,7 @@ interface Props {
   onPageChange?(page: number): void;
   onUserClick?(username: string): void;
   searchQuery?: string;
+  dateRange?: { start?: string; end?: string };
   defaultSortByDuration?: boolean;
   defaultSortByUser?: boolean;
   onNotify?(message: string, tone?: 'info' | 'success' | 'error'): void;
@@ -28,6 +29,7 @@ export function ActivityLog({
   onPageChange,
   onUserClick,
   searchQuery: externalSearchQuery = '',
+  dateRange,
   defaultSortByDuration = false,
   defaultSortByUser = false,
   onNotify,
@@ -617,6 +619,8 @@ export function ActivityLog({
       const result = await fetchScreenshots({
         user: event.username,
         limit: 100, // Get more screenshots to increase chances of finding a match
+        startDate: dateRange?.start,
+        endDate: dateRange?.end,
       });
 
       if (!result.items || result.items.length === 0) {
@@ -715,6 +719,8 @@ export function ActivityLog({
         const result = await fetchScreenshots({
           user: event.username,
           limit: 100,
+          startDate: dateRange?.start,
+          endDate: dateRange?.end,
         });
         
         const foundScreenshot = result.items.find(s => s.filename === screenshotInfo.filename);

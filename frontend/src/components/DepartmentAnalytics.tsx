@@ -57,7 +57,6 @@ export function DepartmentAnalytics({
   const [departmentUsersError, setDepartmentUsersError] = useState<Map<string, string>>(new Map());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
-  const [draftRange, setDraftRange] = useState<{ start?: string; end?: string }>({});
 
   const toIsoDate = (date: Date): string => {
     const y = date.getFullYear();
@@ -81,11 +80,11 @@ export function DepartmentAnalytics({
 
   const startIso = dateRange?.start;
   const endIso = dateRange?.end;
-  const draftStart = draftRange.start;
-  const draftEnd = draftRange.end;
   const rangeLabel = startIso
-    ? `${formatRangeDate(startIso)}${endIso ? ` – ${formatRangeDate(endIso)}` : ' – ...'}`
-    : 'Select dates';
+    ? startIso === endIso || !endIso
+      ? formatRangeDate(startIso)
+      : `${formatRangeDate(startIso)} – ${formatRangeDate(endIso)}`
+    : 'Select date';
 
   const calendarDays = useMemo(() => {
     const year = calendarMonth.getFullYear();
@@ -101,8 +100,8 @@ export function DepartmentAnalytics({
   }, [calendarMonth]);
 
   const isInRange = (iso: string): boolean => {
-    if (!draftStart || !draftEnd) return false;
-    return iso >= draftStart && iso <= draftEnd;
+    if (!startIso || !endIso) return false;
+    return iso >= startIso && iso <= endIso;
   };
 
   const handleDaySelect = (day: Date) => {
@@ -111,22 +110,9 @@ export function DepartmentAnalytics({
     if (day.getTime() > today.getTime()) return;
 
     const iso = toIsoDate(day);
-    if (!draftStart || draftEnd) {
-      setDraftRange({ start: iso, end: undefined });
-      return;
-    }
-    if (iso < draftStart) {
-      setDraftRange({ start: iso, end: draftStart });
-    } else {
-      setDraftRange({ start: draftStart, end: iso });
-    }
+    onDateRangeChange?.({ start: iso, end: iso });
+    setCalendarOpen(false);
   };
-
-  useEffect(() => {
-    if (calendarOpen) {
-      setDraftRange({ start: startIso, end: endIso });
-    }
-  }, [calendarOpen, startIso, endIso]);
 
   const rangeParams = useMemo(() => {
     if (dateRange?.start || dateRange?.end) {
@@ -405,16 +391,42 @@ export function DepartmentAnalytics({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+          <div className="flex items-center gap-2">
             <button
               className="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent hover:border-gray-400 dark:hover:border-gray-600"
-              onClick={() => setCalendarOpen((v) => !v)}
+              onClick={() => {
+                const today = new Date();
+                const todayIso = toIsoDate(today);
+                setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+                onDateRangeChange?.({ start: todayIso, end: todayIso });
+              }}
               type="button"
             >
-              {rangeLabel}
+              Today
             </button>
-            {calendarOpen && (
-              <div className="absolute right-0 mt-2 w-72 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-lg p-3 z-50">
+            <button
+              className="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent hover:border-gray-400 dark:hover:border-gray-600"
+              onClick={() => {
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayIso = toIsoDate(yesterday);
+                setCalendarMonth(new Date(yesterday.getFullYear(), yesterday.getMonth(), 1));
+                onDateRangeChange?.({ start: yesterdayIso, end: yesterdayIso });
+              }}
+              type="button"
+            >
+              Yesterday
+            </button>
+            <div className="relative">
+              <button
+                className="text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent hover:border-gray-400 dark:hover:border-gray-600"
+                onClick={() => setCalendarOpen((v) => !v)}
+                type="button"
+              >
+                {rangeLabel}
+              </button>
+              {calendarOpen && (
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-lg p-3 z-50">
                 <div className="flex items-center justify-between mb-2">
                   <button
                     className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
@@ -443,8 +455,8 @@ export function DepartmentAnalytics({
                   </button>
                 </div>
                 <div className="grid grid-cols-7 text-[10px] text-gray-500 dark:text-gray-400 mb-1">
-                  {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => (
-                    <div key={d} className="text-center py-1">
+                  {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, idx) => (
+                    <div key={`${d}-${idx}`} className="text-center py-1">
                       {d}
                     </div>
                   ))}
@@ -453,8 +465,8 @@ export function DepartmentAnalytics({
                   {calendarDays.map((day) => {
                     const iso = toIsoDate(day);
                     const isCurrentMonth = day.getMonth() === calendarMonth.getMonth();
-                    const isStart = draftStart === iso;
-                    const isEnd = draftEnd === iso;
+                    const isStart = startIso === iso;
+                    const isEnd = endIso === iso;
                     const isRange = isInRange(iso);
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
@@ -483,31 +495,11 @@ export function DepartmentAnalytics({
                   <button
                     className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
                     onClick={() => {
-                      const todayIso = toIsoDate(new Date());
-                      setDraftRange({ start: todayIso, end: todayIso });
-                    }}
-                    type="button"
-                  >
-                    Today
-                  </button>
-                  <button
-                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
-                    onClick={() => {
-                      setDraftRange({});
+                      onDateRangeChange?.({ start: undefined, end: undefined });
                     }}
                     type="button"
                   >
                     Clear
-                  </button>
-                  <button
-                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
-                    onClick={() => {
-                      onDateRangeChange?.({ start: draftStart, end: draftEnd });
-                      setCalendarOpen(false);
-                    }}
-                    type="button"
-                  >
-                    Apply
                   </button>
                   <button
                     className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-700"
@@ -517,8 +509,9 @@ export function DepartmentAnalytics({
                     Close
                   </button>
                 </div>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
           {/* Search */}
           <input

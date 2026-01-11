@@ -5,9 +5,10 @@ import { ActivityItem, Paginated, Department, UserDepartment } from 'src/types';
 interface Props {
   username: string | null;
   onClose(): void;
+  dateRange?: { start?: string; end?: string };
 }
 
-export function UserDetailsModal({ username, onClose }: Props): JSX.Element | null {
+export function UserDetailsModal({ username, onClose, dateRange }: Props): JSX.Element | null {
   const [userActivity, setUserActivity] = useState<Paginated<ActivityItem> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -22,7 +23,7 @@ export function UserDetailsModal({ username, onClose }: Props): JSX.Element | nu
       setError(undefined);
       try {
         const [activity, depts, userDepts] = await Promise.all([
-          fetchActivity({ username, page: 1, limit: 20, timeRange: 'all' }),
+          fetchActivity({ username, page: 1, limit: 20, timeRange: 'all', startDate: dateRange?.start, endDate: dateRange?.end }),
           listDepartments(),
           listUserDepartments(),
         ]);
@@ -37,7 +38,7 @@ export function UserDetailsModal({ username, onClose }: Props): JSX.Element | nu
     };
 
     loadData();
-  }, [username]);
+  }, [username, dateRange?.end, dateRange?.start]);
 
   // Disable body scroll when modal is open
   useEffect(() => {
@@ -167,4 +168,3 @@ export function UserDetailsModal({ username, onClose }: Props): JSX.Element | nu
     </div>
   );
 }
-

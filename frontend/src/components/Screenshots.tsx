@@ -21,6 +21,7 @@ interface Props {
   searchQuery?: string;
   /** Optional map of username -> display name for showing real names */
   displayNames?: Record<string, string>;
+  dateRange?: { start?: string; end?: string };
   onNotify?(message: string, tone?: 'info' | 'success' | 'error'): void;
 }
 
@@ -39,6 +40,7 @@ export function Screenshots({
   userRole,
   searchQuery: externalSearchQuery,
   displayNames,
+  dateRange,
   onNotify,
 }: Props): JSX.Element {
   const [open, setOpen] = useState<string | null>(null);
@@ -51,6 +53,7 @@ export function Screenshots({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const [brokenFiles, setBrokenFiles] = useState<Set<string>>(new Set());
   const panStartRef = useRef({ startX: 0, startY: 0, clientX: 0, clientY: 0 });
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -88,6 +91,28 @@ export function Screenshots({
 
   const getUserLabel = (username: string): string => {
     return displayNames?.[username] || username;
+  };
+
+  const markBroken = (filename: string) => {
+    setBrokenFiles((prev) => {
+      if (prev.has(filename)) return prev;
+      const next = new Set(prev);
+      next.add(filename);
+      return next;
+    });
+  };
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>, item: ScreenshotItem) => {
+    const target = e.currentTarget;
+    const fallbackSrc = `/screenshots/${item.filename}`;
+    const fallbackApplied = target.dataset.fallbackApplied === 'true';
+    if (!fallbackApplied && item.url && item.url !== fallbackSrc) {
+      target.dataset.fallbackApplied = 'true';
+      target.src = fallbackSrc;
+      return;
+    }
+    markBroken(item.filename);
+    target.removeAttribute('src');
   };
 
   // Sort and filter screenshots
@@ -399,6 +424,8 @@ export function Screenshots({
         page: 1,
         limit: 1000,
         user: userFilter || undefined,
+        startDate: dateRange?.start,
+        endDate: dateRange?.end,
       });
       setAllScreenshots(res.items);
     } catch (e: unknown) {
@@ -555,18 +582,19 @@ export function Screenshots({
                     className="text-left w-full"
                   >
                     <div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden ring-1 ring-transparent group-hover:ring-blue-300/40 transition-all relative">
-                      <img
-                        src={s.url || `/screenshots/${s.filename}`}
-                        alt={s.filename}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          if (s.url && s.url !== `/screenshots/${s.filename}`) {
-                            target.src = `/screenshots/${s.filename}`;
-                          }
-                        }}
-                      />
+                      {brokenFiles.has(s.filename) ? (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                          Missing screenshot
+                        </div>
+                      ) : (
+                        <img
+                          src={s.url || `/screenshots/${s.filename}`}
+                          alt={s.filename}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                          onError={(e) => handleImageError(e, s)}
+                        />
+                      )}
                       {isAdmin && (
                         <button
                           onClick={(e) => handleDelete(s.filename, e)}
@@ -628,17 +656,18 @@ export function Screenshots({
                     className="flex-1 flex items-center gap-3 text-left"
                   >
                     <div className="w-24 h-16 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden flex-shrink-0">
-                      <img
-                        src={s.url || `/screenshots/${s.filename}`}
-                        alt={s.filename}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          if (s.url && s.url !== `/screenshots/${s.filename}`) {
-                            target.src = `/screenshots/${s.filename}`;
-                          }
-                        }}
-                      />
+                      {brokenFiles.has(s.filename) ? (
+                        <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400">
+                          Missing
+                        </div>
+                      ) : (
+                        <img
+                          src={s.url || `/screenshots/${s.filename}`}
+                          alt={s.filename}
+                          className="w-full h-full object-cover"
+                          onError={(e) => handleImageError(e, s)}
+                        />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate">{s.filename}</div>
@@ -787,6 +816,7 @@ export function Screenshots({
                 alt={currentScreenshot.filename}
                 className="max-w-full max-h-full object-contain transition-transform duration-150"
                 style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
+                onError={(e) => handleImageError(e, currentScreenshot)}
                 onLoad={(e) => {
                   const target = e.currentTarget;
                   setImageSize({ width: target.naturalWidth, height: target.naturalHeight });
